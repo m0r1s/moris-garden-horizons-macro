@@ -7,7 +7,7 @@ A Python-based Garden Horizons macro.
 
 ## GUI Screenshot
  
-<img width="557" height="409" alt="image-Photoroom (2)" src="https://github.com/user-attachments/assets/2aaaa20d-3973-470a-8c96-b9a26bf0607c" />
+<img width="521" height="335" alt="image-Photoroom (2) (1)" src="https://github.com/user-attachments/assets/2cf17093-6d5e-4e66-acf6-396c5b6e870f" />
 
 ---
 
