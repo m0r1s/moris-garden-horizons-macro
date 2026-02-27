@@ -25,7 +25,7 @@ jobs:
         run: pip install pyinstaller PySide6 pynput pywin32 pyautogui
 
       - name: Build EXE
-        run: pyinstaller --onefile --noconsole moris_garden_horizons_macro.py
+        run: pyinstaller --onefile --noconsole --icon=icon.ico moris_garden_horizons_macro.py
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
