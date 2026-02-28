@@ -7,10 +7,8 @@ A Python-based Garden Horizons macro.
 
 ## GUI Screenshot
  
-<img width="526" height="339" alt="1" src="https://github.com/user-attachments/assets/0e8310a3-022a-49ba-b01b-b513d9120b0c" />
-<img width="523" height="337" alt="2" src="https://github.com/user-attachments/assets/5310034f-e276-470c-a7e8-56c38fade692" />
-<img width="526" height="343" alt="3" src="https://github.com/user-attachments/assets/2a0ad81f-9ebb-45ff-ba42-8458186733fc" />
-<img width="526" height="338" alt="4" src="https://github.com/user-attachments/assets/fd0a1640-0fdb-49c8-81d2-a44d7f90a03a" />
+<img width="476" height="307" alt="1" src="https://github.com/user-attachments/assets/efadfcac-b8fc-4483-a2d1-c914a64ea35c" /><img width="476" height="307" alt="2" src="https://github.com/user-attachments/assets/74126ff3-e64f-4c99-a374-37db302077f9" />
+<img width="476" height="307" alt="3" src="https://github.com/user-attachments/assets/25cea99d-0146-40ea-bd70-e437068ec1eb" /><img width="476" height="307" alt="4" src="https://github.com/user-attachments/assets/37fcb3a0-df89-4074-9457-946b4fdb3928" />
 
 ---
 
