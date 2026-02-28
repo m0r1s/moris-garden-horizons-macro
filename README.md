@@ -7,7 +7,10 @@ A Python-based Garden Horizons macro.
 
 ## GUI Screenshot
  
-<img width="521" height="335" alt="image-Photoroom (2) (1)" src="https://github.com/user-attachments/assets/2cf17093-6d5e-4e66-acf6-396c5b6e870f" />
+<img width="526" height="339" alt="1" src="https://github.com/user-attachments/assets/0e8310a3-022a-49ba-b01b-b513d9120b0c" />
+<img width="523" height="337" alt="2" src="https://github.com/user-attachments/assets/5310034f-e276-470c-a7e8-56c38fade692" />
+<img width="526" height="343" alt="3" src="https://github.com/user-attachments/assets/2a0ad81f-9ebb-45ff-ba42-8458186733fc" />
+<img width="526" height="338" alt="4" src="https://github.com/user-attachments/assets/fd0a1640-0fdb-49c8-81d2-a44d7f90a03a" />
 
 ---
 
@@ -15,7 +18,8 @@ A Python-based Garden Horizons macro.
 
 - **Automatic Seed Purchasing**: Automatically purchases in GUI selected Seeds.
 - **Automatic Tool Purchasing**: Automatically purchases in GUI selected Tools.
-- **Fast Collect**: Hold E to collect everything nearby in light-speed.
+- **Stock Detection**: If Seeds are out of Stock the macro skips them.
+- **Action Logging**: Logs the current macro Action in the GUI.
 - **Shop Timer**: The in-game shop Timer displayed in the GUI.
 - **Changeable Keybinds**: Changeable macro Hotkeys.
 - **Custom UI Navigation Key**: All UI Navigation Hotkey Support.
@@ -35,7 +39,6 @@ A Python-based Garden Horizons macro.
 |-----|--------------|
 | `F1` | Start the macro |
 | `F2` | Reload the macro |
-| `F3` | Fast Collect Toggle |
 
 ### Getting Started
 
