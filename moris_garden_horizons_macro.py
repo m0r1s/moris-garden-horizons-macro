@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import (
     Qt, QTimer, Signal, QObject, QRectF, QPointF,
-    QSize, QPropertyAnimation, QEasingCurve, Property
+    QSize, QPropertyAnimation, QEasingCurve, Property, QMetaObject, Q_ARG
 )
 from PySide6.QtGui import (
     QFont, QPixmap, QIcon, QPainter, QColor, QBrush, QPen,
@@ -262,6 +262,7 @@ QLabel#toggleLabel {{ font-size: 11px; color: {t['text']}; }}
 QLabel#settingVal {{ font-size: 12px; font-weight: 600; color: {t['text']}; }}
 QLabel#statusActive {{ font-size: 11px; font-weight: 700; color: {t['green']}; }}
 QLabel#statusInactive {{ font-size: 11px; font-weight: 700; color: {t['red']}; }}
+QLabel#actionLog {{ font-size: 11px; color: {t['dim']}; }}
 QPushButton:focus {{ outline: none; }}
 QPushButton#btnStart {{
     background: {t['btn_start_bg']};
@@ -288,30 +289,7 @@ QPushButton#btnReload:hover {{
 QPushButton#btnReload:pressed {{
     background: {'rgba(137,223,255,0.22)' if d else 'rgba(0,113,168,0.19)'};
 }}
-QPushButton#btnESpamOff {{
-    background: {'rgba(255,80,80,0.09)' if d else 'rgba(180,40,40,0.07)'};
-    border: 1px solid {'rgba(255,80,80,0.32)' if d else 'rgba(180,40,40,0.24)'};
-    color: {'#ff7070' if d else '#b02828'}; font-size: 12px; font-weight: 700;
-    padding: 5px 14px; border-radius: 7px;
-}}
-QPushButton#btnESpamOff:hover {{
-    background: {'rgba(255,80,80,0.18)' if d else 'rgba(180,40,40,0.13)'};
-}}
-QPushButton#btnESpamOff:pressed {{
-    background: {'rgba(255,80,80,0.28)' if d else 'rgba(180,40,40,0.20)'};
-}}
-QPushButton#btnESpamOn {{
-    background: {'rgba(255,180,0,0.12)' if d else 'rgba(180,110,0,0.08)'};
-    border: 1px solid {'rgba(255,180,0,0.45)' if d else 'rgba(180,110,0,0.32)'};
-    color: {'#ffcc44' if d else '#a06800'}; font-size: 12px; font-weight: 700;
-    padding: 5px 14px; border-radius: 7px;
-}}
-QPushButton#btnESpamOn:hover {{
-    background: {'rgba(255,180,0,0.22)' if d else 'rgba(180,110,0,0.15)'};
-}}
-QPushButton#btnESpamOn:pressed {{
-    background: {'rgba(255,180,0,0.33)' if d else 'rgba(180,110,0,0.24)'};
-}}
+
 QPushButton#btnClose {{
     background: transparent; border: none;
     color: {t['dim']}; font-size: 11px; font-weight: 700;
@@ -439,14 +417,12 @@ def icon_eye_pixmap(color, size=16):
     p.setBrush(Qt.NoBrush)
     p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
-    # dot
     p.setBrush(QBrush(c))
     p.setPen(Qt.NoPen)
     dot_r = 1.2
     dot_y = cy - r + 2.6
     p.drawEllipse(QRectF(cx - dot_r, dot_y, dot_r * 2, dot_r * 2))
 
-    # stem with a small gap below the dot
     pen_stem = QPen(c, 1.5, Qt.SolidLine, Qt.RoundCap)
     p.setPen(pen_stem)
     p.drawLine(QPointF(cx, dot_y + dot_r * 2 + 1.8), QPointF(cx, cy + r - 2.2))
@@ -462,7 +438,6 @@ def icon_tab(name, color, size=13):
     cx = cy = size / 2
 
     if name == "dashboard":
-        # filled solid house
         p.setBrush(QBrush(c)); p.setPen(Qt.NoPen)
         roof = QPainterPath()
         roof.moveTo(cx, cy - 5.8)
@@ -476,7 +451,6 @@ def icon_tab(name, color, size=13):
         p.setCompositionMode(QPainter.CompositionMode_SourceOver)
 
     elif name == "seeds":
-        # minimal sprout: stem + two leaves
         pen = QPen(c, 1.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         p.setPen(pen); p.setBrush(Qt.NoBrush)
         p.drawLine(QPointF(cx, cy + 5.0), QPointF(cx, cy - 2.0))
@@ -492,25 +466,21 @@ def icon_tab(name, color, size=13):
         p.drawPath(path2)
 
     elif name == "tools":
-        # wrench
         pen = QPen(c, 1.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         p.setPen(pen); p.setBrush(Qt.NoBrush)
         p.save()
         p.translate(cx, cy)
         p.rotate(-45)
-        # handle shaft
         shaft_pen = QPen(c, 2.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         p.setPen(shaft_pen)
         p.drawLine(QPointF(0, 1.5), QPointF(0, 7.5))
         p.setPen(pen)
-        # open-end head at top
         head = QPainterPath()
         head.moveTo(-2.8, -2.0)
         head.lineTo(-2.8, -5.5)
         head.cubicTo(-2.8, -8.5, 2.8, -8.5, 2.8, -5.5)
         head.lineTo(2.8, -2.0)
         p.drawPath(head)
-        # gap in head (open-end wrench slot)
         p.setPen(QPen(QColor(0, 0, 0, 0), 0))
         p.setBrush(QBrush(c))
         p.drawRect(QRectF(-1.3, -5.2, 2.6, 3.5))
@@ -518,7 +488,6 @@ def icon_tab(name, color, size=13):
         p.restore()
 
     elif name == "settings":
-        # outline sliders / equalizer
         pen = QPen(c, 1.3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         p.setPen(pen); p.setBrush(Qt.NoBrush)
         for xo, yh in [(-3.8, 2.5), (0.0, 4.0), (3.8, 1.5)]:
@@ -532,7 +501,6 @@ def icon_tab(name, color, size=13):
     return QIcon(pm)
 
 
-# Toggle switch geometry constants — knob perfectly centered on track
 _SW_W      = 40
 _SW_H      = 20
 _TRACK_H   = 14
@@ -594,8 +562,6 @@ class ToggleSwitch(QWidget):
         gv = int(c_off.green() + (c_on.green() - c_off.green()) * a)
         bv = int(c_off.blue()  + (c_on.blue()  - c_off.blue())  * a)
 
-        # Track spans exactly between the two knob center positions
-        # so the knob circle fully covers both end caps — zero bleed possible
         knob_off_cx = _KNOB_OFF + _KNOB_D / 2
         knob_on_cx  = _KNOB_OFF + _KNOB_TRAV + _KNOB_D / 2
         track_x     = knob_off_cx - _TRACK_H / 2
@@ -701,8 +667,16 @@ class KeyCaptureEdit(QLineEdit):
                 self._listening = False
                 e.accept()
                 return
-            seq = QKeySequence(mods.value | key)
-            key_str = seq.toString()
+            if key in (Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta,
+                       Qt.Key_NumLock, Qt.Key_CapsLock, Qt.Key_ScrollLock):
+                e.accept()
+                return
+            text = e.text()
+            if text and text.isprintable() and len(text) == 1:
+                key_str = text
+            else:
+                seq = QKeySequence(mods.value | key)
+                key_str = seq.toString()
             if key_str:
                 self._value = key_str
                 self.setText(key_str)
@@ -748,7 +722,6 @@ class MinimizeBtn(QPushButton):
         cx, cy = 11, 11
         color = QColor(t["text"] if self._hovered else t["dim"])
 
-        # Minimise: a clean flat line with two small end caps
         pen = QPen(color, 1.8, Qt.SolidLine, Qt.RoundCap)
         p.setPen(pen)
         p.drawLine(QPointF(cx - 5, cy + 2), QPointF(cx + 5, cy + 2))
@@ -893,7 +866,7 @@ class DashboardTab(QWidget):
         self._sequence_stop = threading.Event()
 
         lo = QVBoxLayout(self)
-        lo.setContentsMargins(12, 9, 12, 9)
+        lo.setContentsMargins(12, 9, 12, 13)
         lo.setSpacing(7)
 
         stat_row = QHBoxLayout(); stat_row.setSpacing(6)
@@ -920,6 +893,12 @@ class DashboardTab(QWidget):
         ov_lo.addWidget(self._tools_row)
         lo.addWidget(ov)
 
+        self._action_lbl = QLabel("")
+        self._action_lbl.setObjectName("actionLog")
+        self._action_lbl.setAlignment(Qt.AlignCenter)
+        self._action_lbl.setWordWrap(False)
+        lo.addStretch()
+        lo.addWidget(self._action_lbl)
         lo.addStretch()
 
         btn_row = QHBoxLayout(); btn_row.setSpacing(6)
@@ -941,19 +920,9 @@ class DashboardTab(QWidget):
         btn_row.addWidget(self._btn_start, 1)
         btn_row.addWidget(self._btn_reload, 1)
 
-        self._espam_enabled = False
-        self._espam_e_held = False
-        self._espam_thread = None
-        self._espam_stop = threading.Event()
         self._pynput_listener = None
+        self._sequence_running = False
 
-        self._btn_espam = QPushButton("  Fast Collect  |  F3")
-        self._btn_espam.setObjectName("btnESpamOff")
-        self._btn_espam.setCursor(Qt.PointingHandCursor)
-        self._btn_espam.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._btn_espam.setFixedHeight(44)
-        self._btn_espam.clicked.connect(self.toggle_espam)
-        btn_row.addWidget(self._btn_espam, 1)
         lo.addLayout(btn_row)
 
         self._timer = QTimer(self)
@@ -1033,6 +1002,13 @@ class DashboardTab(QWidget):
     def _repolish(self, w):
         w.style().unpolish(w); w.style().polish(w); w.update()
 
+    def _set_action(self, text):
+        QMetaObject.invokeMethod(
+            self._action_lbl, "setText",
+            Qt.QueuedConnection,
+            Q_ARG(str, text)
+        )
+
     def update_start_label(self, key):
         self._btn_start.setText(f"  Start  |  {key}")
 
@@ -1040,12 +1016,54 @@ class DashboardTab(QWidget):
         self._btn_reload.setText(f"  Reload  |  {key}")
 
     def _on_run_sequence(self):
-        resize_roblox_window()
-        self._running = True
-        self._status_lbl.setText("Running")
-        self._status_lbl.setObjectName("statusRunning")
-        self._repolish(self._status_lbl)
-        self.run_seedshop_sequence()
+        if hasattr(self, '_nav_dashboard'):
+            self._nav_dashboard()
+        if _WIN32_OK:
+            import random, ctypes, ctypes.wintypes
+
+            class _MOUSEINPUT(ctypes.Structure):
+                _fields_ = [
+                    ("dx", ctypes.c_long), ("dy", ctypes.c_long),
+                    ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
+                    ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                ]
+
+            class _INPUT(ctypes.Structure):
+                class __INPUT(ctypes.Union):
+                    _fields_ = [("mi", _MOUSEINPUT)]
+                _anonymous_ = ("_input",)
+                _fields_ = [("type", ctypes.c_ulong), ("_input", __INPUT)]
+
+            def _send_mouse_move(x, y):
+                sw = ctypes.windll.user32.GetSystemMetrics(0)
+                sh = ctypes.windll.user32.GetSystemMetrics(1)
+                ax = int(x * 65535 / sw)
+                ay = int(y * 65535 / sh)
+                inp = _INPUT()
+                inp.type = 0
+                inp.mi.dx = ax
+                inp.mi.dy = ay
+                inp.mi.mouseData = 0
+                inp.mi.dwFlags = 0x0001 | 0x8000
+                inp.mi.time = 0
+                inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+            tx, ty = 480, 330
+            cx, cy = win32api.GetCursorPos()
+            steps = random.randint(20, 35)
+            for i in range(1, steps + 1):
+                t = i / steps
+                t = t * t * (3 - 2 * t)
+                _send_mouse_move(int(cx + (tx - cx) * t), int(cy + (ty - cy) * t))
+                time.sleep(random.uniform(0.008, 0.018))
+            resize_roblox_window()
+            self._running = True
+            self._status_lbl.setText("Running")
+            self._status_lbl.setObjectName("statusRunning")
+            self._repolish(self._status_lbl)
+            self._set_action("Starting sequence...")
+            self.run_seedshop_sequence()
 
     def toggle_running(self):
         self._running = not self._running
@@ -1059,78 +1077,14 @@ class DashboardTab(QWidget):
 
     def reload(self):
         self._sequence_stop.set()
-        if self._espam_enabled:
-            self._espam_enabled = False
-            self._btn_espam.setObjectName("btnESpamOff")
-            self._stop_espam_listener()
-            self._repolish(self._btn_espam)
+        self._sequence_running = False
         self._running = False
         self._elapsed = 0
         self._status_lbl.setText("Stopped")
         self._status_lbl.setObjectName("statusStopped")
         self._repolish(self._status_lbl)
         self._elapsed_lbl.setText("00:00:00")
-
-    def toggle_espam(self):
-        if self._espam_enabled:
-            self._espam_enabled = False
-            self._btn_espam.setObjectName("btnESpamOff")
-            self._stop_espam_listener()
-        else:
-            self._espam_enabled = True
-            self._btn_espam.setObjectName("btnESpamOn")
-            self._start_espam_listener()
-        self._repolish(self._btn_espam)
-
-    def _start_espam_listener(self):
-        if not _PYNPUT_OK:
-            return
-        self._espam_e_held = False
-        self._kb_ctrl = KeyboardController()
-        self._espam_injecting = False
-
-        def on_press(key):
-            if self._espam_injecting:
-                return
-            try:
-                if key.char in ('e', 'E'):
-                    self._espam_e_held = True
-            except AttributeError:
-                pass
-
-        def on_release(key):
-            if self._espam_injecting:
-                return
-            try:
-                if key.char in ('e', 'E'):
-                    self._espam_e_held = False
-            except AttributeError:
-                pass
-
-        self._pynput_listener = _pynput_keyboard.Listener(
-            on_press=on_press, on_release=on_release
-        )
-        self._pynput_listener.start()
-
-        def spam_loop():
-            while self._espam_enabled:
-                if self._espam_e_held:
-                    self._espam_injecting = True
-                    self._kb_ctrl.press('e')
-                    self._kb_ctrl.release('e')
-                    self._espam_injecting = False
-                    time.sleep(0.05)
-                else:
-                    time.sleep(0.01)
-
-        self._espam_thread = threading.Thread(target=spam_loop, daemon=True)
-        self._espam_thread.start()
-
-    def _stop_espam_listener(self):
-        self._espam_e_held = False
-        if self._pynput_listener is not None:
-            self._pynput_listener.stop()
-            self._pynput_listener = None
+        self._action_lbl.setText("")
 
     def run_seedshop_sequence(self):
         if not _PYNPUT_OK:
@@ -1147,6 +1101,8 @@ class DashboardTab(QWidget):
         def _step(seconds):
             stop.wait(seconds)
 
+        self._sequence_running = True
+
         def _sequence():
             kb = KeyboardController()
             mc = MouseController()
@@ -1156,6 +1112,7 @@ class DashboardTab(QWidget):
                 return KeyCode.from_char(nav) if len(nav) == 1 else nav
 
             def _return_to_garden(kb, nav_pynput):
+                self._set_action("Returning to garden...")
                 kb.press(nav_pynput)
                 kb.release(nav_pynput)
                 if stop.is_set(): return
@@ -1186,58 +1143,76 @@ class DashboardTab(QWidget):
                 if stop.is_set(): return
                 _step(0.1)
 
-                kb.press(nav_pynput)
-                kb.release(nav_pynput)
-                if stop.is_set(): return
-                _step(0.1)
+                import random, ctypes, ctypes.wintypes
 
-                kb.press(Key.up)
-                kb.release(Key.up)
-                if stop.is_set(): return
-                _step(0.1)
+                class MOUSEINPUT(ctypes.Structure):
+                    _fields_ = [
+                        ("dx", ctypes.c_long),
+                        ("dy", ctypes.c_long),
+                        ("mouseData", ctypes.c_ulong),
+                        ("dwFlags", ctypes.c_ulong),
+                        ("time", ctypes.c_ulong),
+                        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                    ]
 
-                kb.press(Key.up)
-                kb.release(Key.up)
-                if stop.is_set(): return
-                _step(0.1)
+                class INPUT(ctypes.Structure):
+                    class _INPUT(ctypes.Union):
+                        _fields_ = [("mi", MOUSEINPUT)]
+                    _anonymous_ = ("_input",)
+                    _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT)]
 
-                kb.press(Key.left)
-                kb.release(Key.left)
-                if stop.is_set(): return
-                _step(0.1)
+                def _send_mouse_move(x, y):
+                    sw = ctypes.windll.user32.GetSystemMetrics(0)
+                    sh = ctypes.windll.user32.GetSystemMetrics(1)
+                    ax = int(x * 65535 / sw)
+                    ay = int(y * 65535 / sh)
+                    inp = INPUT()
+                    inp.type = 0
+                    inp.mi.dx = ax
+                    inp.mi.dy = ay
+                    inp.mi.mouseData = 0
+                    inp.mi.dwFlags = 0x0001 | 0x8000
+                    inp.mi.time = 0
+                    inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
 
-                kb.press(Key.left)
-                kb.release(Key.left)
-                if stop.is_set(): return
-                _step(0.1)
+                def _send_mouse_click():
+                    for flag in (0x0002, 0x0004):
+                        inp = INPUT()
+                        inp.type = 0
+                        inp.mi.dx = 0
+                        inp.mi.dy = 0
+                        inp.mi.mouseData = 0
+                        inp.mi.dwFlags = flag
+                        inp.mi.time = 0
+                        inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                        ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+                        time.sleep(random.uniform(0.05, 0.15))
 
-                kb.press(Key.up)
-                kb.release(Key.up)
-                if stop.is_set(): return
-                _step(0.1)
+                tx = 478 + random.randint(-3, 3)
+                ty = 122 + random.randint(-3, 3)
+                steps = random.randint(20, 35)
+                cx, cy = win32api.GetCursorPos()
+                for i in range(1, steps + 1):
+                    t = i / steps
+                    t = t * t * (3 - 2 * t)
+                    nx = int(cx + (tx - cx) * t)
+                    ny = int(cy + (ty - cy) * t)
+                    _send_mouse_move(nx, ny)
+                    time.sleep(random.uniform(0.008, 0.018))
+                time.sleep(random.uniform(0.03, 0.1))
+                _send_mouse_click()
 
-                kb.press(Key.right)
-                kb.release(Key.right)
-                if stop.is_set(): return
-                _step(0.1)
-
-                kb.press(Key.down)
-                kb.release(Key.down)
-                if stop.is_set(): return
-                _step(0.1)
-
-                kb.press(Key.right)
-                kb.release(Key.right)
-                if stop.is_set(): return
-                _step(0.1)
-
-                kb.press(Key.enter)
-                kb.release(Key.enter)
-                if stop.is_set(): return
-                _step(0.1)
-
-                kb.press(nav_pynput)
-                kb.release(nav_pynput)
+                cx2, cy2 = win32api.GetCursorPos()
+                tx2, ty2 = 480, 330
+                steps2 = random.randint(20, 35)
+                for i in range(1, steps2 + 1):
+                    t2 = i / steps2
+                    t2 = t2 * t2 * (3 - 2 * t2)
+                    nx2 = int(cx2 + (tx2 - cx2) * t2)
+                    ny2 = int(cy2 + (ty2 - cy2) * t2)
+                    _send_mouse_move(nx2, ny2)
+                    time.sleep(random.uniform(0.008, 0.018))
 
             seed_order = [
                 "Carrot", "Corn", "Onion", "Strawberry", "Mushroom",
@@ -1289,6 +1264,29 @@ class DashboardTab(QWidget):
                     and any(r.is_on() for r in self._seeds_tab._rows)
                 )
 
+            _OOS_SAMPLE_X = 484
+            _OOS_ROW_Y = {0: 290, 1: 387, 2: 481}
+            _OOS_R, _OOS_G, _OOS_B = 254, 0, 68
+            _OOS_TOLERANCE = 30
+
+            def _is_no_stock(nav_position):
+                if not _WIN32_OK:
+                    return False
+                try:
+                    visual_row = min(nav_position, 2)
+                    y = _OOS_ROW_Y[visual_row]
+                    px = _pyautogui.pixel(_OOS_SAMPLE_X, y)
+                    return (
+                        abs(px[0] - _OOS_R) <= _OOS_TOLERANCE
+                        and abs(px[1] - _OOS_G) <= _OOS_TOLERANCE
+                        and abs(px[2] - _OOS_B) <= _OOS_TOLERANCE
+                    )
+                except Exception:
+                    return False
+
+            _oos_seeds = set()
+            _oos_tools = set()
+
             def _buy_seeds():
                 enabled = {
                     name: (
@@ -1298,12 +1296,14 @@ class DashboardTab(QWidget):
                     for name in seed_order
                 }
                 last_position = 0
+                cursor_row = 0
                 for idx, name in enumerate(seed_order):
                     if not enabled[name]:
                         continue
                     if stop.is_set(): return
 
                     downs = seed_position[name] - last_position
+                    cursor_row = min(cursor_row + downs, 2)
                     for _ in range(downs):
                         kb.press(Key.down)
                         kb.release(Key.down)
@@ -1315,9 +1315,61 @@ class DashboardTab(QWidget):
                     if stop.is_set(): return
                     _step(0.1)
 
-                    kb.press(Key.enter)
-                    _step(3.0)
-                    kb.release(Key.enter)
+                    if _is_no_stock(cursor_row):
+                        self._set_action(f"{name} — out of stock, skipping")
+                        _oos_seeds.add(name)
+                        last_position = seed_position[name] + 1
+                        is_last = not any(enabled[n] for n in seed_order[idx + 1:])
+                        if is_last:
+                            if stop.is_set(): return
+                            nav_pynput = _nav_key_pynput()
+                            if _tools_active():
+                                kb.press(nav_pynput)
+                                kb.release(nav_pynput)
+                                if stop.is_set(): return
+                                _step(0.1)
+
+                                kb.press(nav_pynput)
+                                kb.release(nav_pynput)
+                                if stop.is_set(): return
+                                _step(0.1)
+
+                                kb.press(Key.right)
+                                kb.release(Key.right)
+                                if stop.is_set(): return
+                                _step(0.1)
+
+                                kb.press(Key.right)
+                                kb.release(Key.right)
+                                if stop.is_set(): return
+                                _step(0.1)
+
+                                kb.press(Key.enter)
+                                kb.release(Key.enter)
+                                if stop.is_set(): return
+                                _step(0.1)
+
+                                kb.press(nav_pynput)
+                                kb.release(nav_pynput)
+                                if stop.is_set(): return
+                                _step(0.1)
+                            else:
+                                _return_to_garden(kb, nav_pynput)
+                        continue
+                    else:
+                        _oos_seeds.discard(name)
+
+                    self._set_action(f"Buying {name}...")
+
+                    while True:
+                        if stop.is_set(): return
+                        kb.press(Key.enter)
+                        kb.release(Key.enter)
+                        _step(0.1)
+                        if _is_no_stock(cursor_row):
+                            _oos_seeds.add(name)
+                            self._set_action(f"{name} — out of stock, skipping")
+                            break
 
                     last_position = seed_position[name] + 1
 
@@ -1367,12 +1419,14 @@ class DashboardTab(QWidget):
                     for name in tool_order
                 }
                 last_position = 0
+                cursor_row = 0
                 for idx, name in enumerate(tool_order):
                     if not enabled[name]:
                         continue
                     if stop.is_set(): return
 
                     downs = tool_position[name] - last_position
+                    cursor_row = min(cursor_row + downs, 2)
                     for _ in range(downs):
                         kb.press(Key.down)
                         kb.release(Key.down)
@@ -1384,9 +1438,29 @@ class DashboardTab(QWidget):
                     if stop.is_set(): return
                     _step(0.1)
 
-                    kb.press(Key.enter)
-                    _step(3.0)
-                    kb.release(Key.enter)
+                    if _is_no_stock(cursor_row):
+                        self._set_action(f"{name} — out of stock, skipping")
+                        _oos_tools.add(name)
+                        last_position = tool_position[name] + 1
+                        is_last = not any(enabled[n] for n in tool_order[idx + 1:])
+                        if is_last:
+                            if stop.is_set(): return
+                            _return_to_garden(kb, _nav_key_pynput())
+                        continue
+                    else:
+                        _oos_tools.discard(name)
+
+                    self._set_action(f"Buying {name}...")
+
+                    while True:
+                        if stop.is_set(): return
+                        kb.press(Key.enter)
+                        kb.release(Key.enter)
+                        _step(0.1)
+                        if _is_no_stock(cursor_row):
+                            _oos_tools.add(name)
+                            self._set_action(f"{name} — out of stock, skipping")
+                            break
 
                     last_position = tool_position[name] + 1
 
@@ -1396,80 +1470,160 @@ class DashboardTab(QWidget):
                         _return_to_garden(kb, _nav_key_pynput())
 
             def _tool_shop_run():
-                nav_pynput = _nav_key_pynput()
-                kb.press(nav_pynput)
-                kb.release(nav_pynput)
-                if stop.is_set(): return
-                _step(0.1)
+                self._set_action("Walking to tool shop...")
+                import random, ctypes, ctypes.wintypes
 
-                kb.press(Key.up)
-                kb.release(Key.up)
-                if stop.is_set(): return
-                _step(0.1)
+                class MOUSEINPUT(ctypes.Structure):
+                    _fields_ = [
+                        ("dx", ctypes.c_long),
+                        ("dy", ctypes.c_long),
+                        ("mouseData", ctypes.c_ulong),
+                        ("dwFlags", ctypes.c_ulong),
+                        ("time", ctypes.c_ulong),
+                        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                    ]
 
-                kb.press(Key.up)
-                kb.release(Key.up)
-                if stop.is_set(): return
-                _step(0.1)
+                class INPUT(ctypes.Structure):
+                    class _INPUT(ctypes.Union):
+                        _fields_ = [("mi", MOUSEINPUT)]
+                    _anonymous_ = ("_input",)
+                    _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT)]
 
-                kb.press(Key.left)
-                kb.release(Key.left)
-                if stop.is_set(): return
-                _step(0.1)
+                def _send_mouse_move(x, y):
+                    sw = ctypes.windll.user32.GetSystemMetrics(0)
+                    sh = ctypes.windll.user32.GetSystemMetrics(1)
+                    ax = int(x * 65535 / sw)
+                    ay = int(y * 65535 / sh)
+                    inp = INPUT()
+                    inp.type = 0
+                    inp.mi.dx = ax
+                    inp.mi.dy = ay
+                    inp.mi.mouseData = 0
+                    inp.mi.dwFlags = 0x0001 | 0x8000
+                    inp.mi.time = 0
+                    inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
 
-                kb.press(Key.left)
-                kb.release(Key.left)
-                if stop.is_set(): return
-                _step(0.1)
+                def _send_mouse_click():
+                    for flag in (0x0002, 0x0004):
+                        inp = INPUT()
+                        inp.type = 0
+                        inp.mi.dx = 0
+                        inp.mi.dy = 0
+                        inp.mi.mouseData = 0
+                        inp.mi.dwFlags = flag
+                        inp.mi.time = 0
+                        inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                        ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+                        time.sleep(random.uniform(0.05, 0.15))
 
-                kb.press(Key.up)
-                kb.release(Key.up)
-                if stop.is_set(): return
-                _step(0.1)
-
-                kb.press(Key.right)
-                kb.release(Key.right)
-                if stop.is_set(): return
-                _step(0.1)
-
-                kb.press(Key.down)
-                kb.release(Key.down)
-                if stop.is_set(): return
-                _step(0.1)
-
-                kb.press(Key.enter)
-                kb.release(Key.enter)
-                if stop.is_set(): return
-                _step(0.1)
-
-                nav_pynput = _nav_key_pynput()
-                kb.press(nav_pynput)
-                kb.release(nav_pynput)
-                if stop.is_set(): return
-                _step(0.1)
-
-                kb.press('w')
-                kb.press('d')
-                _step(2)
-                kb.release('w')
-                kb.release('d')
-                if stop.is_set(): return
-
-                kb.press('w')
-                _step(1.1)
-                kb.release('w')
-                if stop.is_set(): return
-
-                kb.press('e')
-                kb.release('e')
-                _step(2.5)
-
-                mc.position = (479, 299)
-                scroll_end = time.time() + 1.0
-                while time.time() < scroll_end:
+                while True:
                     if stop.is_set(): return
-                    mc.scroll(0, 1)
-                    _step(0.05)
+                    tx = 334 + random.randint(-3, 3)
+                    ty = 122 + random.randint(-3, 3)
+                    steps = random.randint(20, 35)
+                    cx, cy = win32api.GetCursorPos()
+                    for i in range(1, steps + 1):
+                        t = i / steps
+                        t = t * t * (3 - 2 * t)
+                        nx = int(cx + (tx - cx) * t)
+                        ny = int(cy + (ty - cy) * t)
+                        _send_mouse_move(nx, ny)
+                        time.sleep(random.uniform(0.008, 0.018))
+                    time.sleep(random.uniform(0.03, 0.1))
+                    _send_mouse_click()
+
+                    kb.press('w')
+                    kb.press('d')
+                    _step(2)
+                    kb.release('w')
+                    kb.release('d')
+                    if stop.is_set(): return
+
+                    kb.press('w')
+                    _step(1.1)
+                    kb.release('w')
+                    if stop.is_set(): return
+
+                    kb.press('e')
+                    kb.release('e')
+                    self._set_action("Opening tool shop...")
+                    deadline = time.time() + 5.0
+                    detected = False
+                    while time.time() < deadline:
+                        if stop.is_set(): return
+                        px = win32gui.GetPixel(win32gui.GetDC(0), 403, 236)
+                        r = px & 0xFF
+                        g = (px >> 8) & 0xFF
+                        b = (px >> 16) & 0xFF
+                        if (r, g, b) == (0xC4, 0xCD, 0xE0):
+                            detected = True
+                            break
+                        time.sleep(0.05)
+                    if detected:
+                        self._set_action("Tool shop opened.")
+                        break
+
+                import random, ctypes, ctypes.wintypes
+
+                class MOUSEINPUT(ctypes.Structure):
+                    _fields_ = [
+                        ("dx", ctypes.c_long),
+                        ("dy", ctypes.c_long),
+                        ("mouseData", ctypes.c_ulong),
+                        ("dwFlags", ctypes.c_ulong),
+                        ("time", ctypes.c_ulong),
+                        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                    ]
+
+                class INPUT(ctypes.Structure):
+                    class _INPUT(ctypes.Union):
+                        _fields_ = [("mi", MOUSEINPUT)]
+                    _anonymous_ = ("_input",)
+                    _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT)]
+
+                def _send_mouse_move(x, y):
+                    sw = ctypes.windll.user32.GetSystemMetrics(0)
+                    sh = ctypes.windll.user32.GetSystemMetrics(1)
+                    ax = int(x * 65535 / sw)
+                    ay = int(y * 65535 / sh)
+                    inp = INPUT()
+                    inp.type = 0
+                    inp.mi.dx = ax
+                    inp.mi.dy = ay
+                    inp.mi.mouseData = 0
+                    inp.mi.dwFlags = 0x0001 | 0x8000
+                    inp.mi.time = 0
+                    inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+                def _send_scroll_up():
+                    inp = INPUT()
+                    inp.type = 0
+                    inp.mi.dx = 0
+                    inp.mi.dy = 0
+                    inp.mi.mouseData = 120
+                    inp.mi.dwFlags = 0x0800
+                    inp.mi.time = 0
+                    inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+                tx = 479 + random.randint(-3, 3)
+                ty = 299 + random.randint(-3, 3)
+                steps = random.randint(20, 35)
+                cx, cy = win32api.GetCursorPos()
+                for i in range(1, steps + 1):
+                    t = i / steps
+                    t = t * t * (3 - 2 * t)
+                    nx = int(cx + (tx - cx) * t)
+                    ny = int(cy + (ty - cy) * t)
+                    _send_mouse_move(nx, ny)
+                    time.sleep(random.uniform(0.008, 0.018))
+
+                for _ in range(12):
+                    if stop.is_set(): return
+                    _send_scroll_up()
+                    time.sleep(random.uniform(0.04, 0.08))
 
                 nav_pynput = _nav_key_pynput()
                 kb.press(nav_pynput)
@@ -1489,78 +1643,160 @@ class DashboardTab(QWidget):
                     if stop.is_set(): return
                     _step(0.3)
 
+                self._set_action("Buying tools...")
                 _buy_tools()
 
             def _shop_run():
                 if _seeds_active():
-                    nav_pynput = _nav_key_pynput()
-                    kb.press(nav_pynput)
-                    kb.release(nav_pynput)
-                    if stop.is_set(): return
-                    _step(0.1)
+                    self._set_action("Navigating to seed shop...")
+                    import random, ctypes, ctypes.wintypes
 
-                    kb.press(Key.up)
-                    kb.release(Key.up)
-                    if stop.is_set(): return
-                    _step(0.1)
+                    class MOUSEINPUT(ctypes.Structure):
+                        _fields_ = [
+                            ("dx", ctypes.c_long),
+                            ("dy", ctypes.c_long),
+                            ("mouseData", ctypes.c_ulong),
+                            ("dwFlags", ctypes.c_ulong),
+                            ("time", ctypes.c_ulong),
+                            ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                        ]
 
-                    kb.press(Key.up)
-                    kb.release(Key.up)
-                    if stop.is_set(): return
-                    _step(0.1)
+                    class INPUT(ctypes.Structure):
+                        class _INPUT(ctypes.Union):
+                            _fields_ = [("mi", MOUSEINPUT)]
+                        _anonymous_ = ("_input",)
+                        _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT)]
 
-                    kb.press(Key.left)
-                    kb.release(Key.left)
-                    if stop.is_set(): return
-                    _step(0.1)
+                    def _send_mouse_move(x, y):
+                        sw = ctypes.windll.user32.GetSystemMetrics(0)
+                        sh = ctypes.windll.user32.GetSystemMetrics(1)
+                        ax = int(x * 65535 / sw)
+                        ay = int(y * 65535 / sh)
+                        inp = INPUT()
+                        inp.type = 0
+                        inp.mi.dx = ax
+                        inp.mi.dy = ay
+                        inp.mi.mouseData = 0
+                        inp.mi.dwFlags = 0x0001 | 0x8000
+                        inp.mi.time = 0
+                        inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                        ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
 
-                    kb.press(Key.left)
-                    kb.release(Key.left)
-                    if stop.is_set(): return
-                    _step(0.1)
+                    def _send_mouse_click():
+                        for flag in (0x0002, 0x0004):
+                            inp = INPUT()
+                            inp.type = 0
+                            inp.mi.dx = 0
+                            inp.mi.dy = 0
+                            inp.mi.mouseData = 0
+                            inp.mi.dwFlags = flag
+                            inp.mi.time = 0
+                            inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                            ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+                            time.sleep(random.uniform(0.05, 0.15))
 
-                    kb.press(Key.up)
-                    kb.release(Key.up)
-                    if stop.is_set(): return
-                    _step(0.1)
-
-                    kb.press(Key.right)
-                    kb.release(Key.right)
-                    if stop.is_set(): return
-                    _step(0.1)
-
-                    kb.press(Key.down)
-                    kb.release(Key.down)
-                    if stop.is_set(): return
-                    _step(0.1)
-
-                    kb.press(Key.enter)
-                    kb.release(Key.enter)
-                    if stop.is_set(): return
-                    _step(0.1)
-
-                    nav_pynput = _nav_key_pynput()
-                    kb.press(nav_pynput)
-                    kb.release(nav_pynput)
-                    if stop.is_set(): return
-                    _step(0.1)
-
-                    kb.press('s')
-                    _step(0.1)
-                    kb.release('s')
-                    if stop.is_set(): return
-                    _step(0.1)
-
-                    kb.press('e')
-                    kb.release('e')
-                    _step(2.5)
-
-                    mc.position = (479, 299)
-                    scroll_end = time.time() + 1.0
-                    while time.time() < scroll_end:
+                    while True:
                         if stop.is_set(): return
-                        mc.scroll(0, 1)
-                        _step(0.05)
+                        tx = 334 + random.randint(-3, 3)
+                        ty = 122 + random.randint(-3, 3)
+                        steps = random.randint(20, 35)
+                        cx, cy = win32api.GetCursorPos()
+                        for i in range(1, steps + 1):
+                            t = i / steps
+                            t = t * t * (3 - 2 * t)
+                            nx = int(cx + (tx - cx) * t)
+                            ny = int(cy + (ty - cy) * t)
+                            _send_mouse_move(nx, ny)
+                            time.sleep(random.uniform(0.008, 0.018))
+                        time.sleep(random.uniform(0.03, 0.1))
+                        _send_mouse_click()
+                        _step(0.1)
+
+                        kb.press('s')
+                        _step(0.1)
+                        kb.release('s')
+                        if stop.is_set(): return
+                        _step(0.1)
+
+                        kb.press('e')
+                        kb.release('e')
+                        self._set_action("Opening seed shop...")
+                        deadline = time.time() + 5.0
+                        detected = False
+                        while time.time() < deadline:
+                            if stop.is_set(): return
+                            px = win32gui.GetPixel(win32gui.GetDC(0), 405, 205)
+                            r = px & 0xFF
+                            g = (px >> 8) & 0xFF
+                            b = (px >> 16) & 0xFF
+                            if (r, g, b) == (0xFF, 0xE7, 0xDF):
+                                detected = True
+                                break
+                            time.sleep(0.05)
+                        if detected:
+                            self._set_action("Seed shop opened.")
+                            break
+
+                    import random, ctypes, ctypes.wintypes
+
+                    class MOUSEINPUT(ctypes.Structure):
+                        _fields_ = [
+                            ("dx", ctypes.c_long),
+                            ("dy", ctypes.c_long),
+                            ("mouseData", ctypes.c_ulong),
+                            ("dwFlags", ctypes.c_ulong),
+                            ("time", ctypes.c_ulong),
+                            ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                        ]
+
+                    class INPUT(ctypes.Structure):
+                        class _INPUT(ctypes.Union):
+                            _fields_ = [("mi", MOUSEINPUT)]
+                        _anonymous_ = ("_input",)
+                        _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT)]
+
+                    def _send_mouse_move(x, y):
+                        sw = ctypes.windll.user32.GetSystemMetrics(0)
+                        sh = ctypes.windll.user32.GetSystemMetrics(1)
+                        ax = int(x * 65535 / sw)
+                        ay = int(y * 65535 / sh)
+                        inp = INPUT()
+                        inp.type = 0
+                        inp.mi.dx = ax
+                        inp.mi.dy = ay
+                        inp.mi.mouseData = 0
+                        inp.mi.dwFlags = 0x0001 | 0x8000
+                        inp.mi.time = 0
+                        inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                        ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+                    def _send_scroll_up():
+                        inp = INPUT()
+                        inp.type = 0
+                        inp.mi.dx = 0
+                        inp.mi.dy = 0
+                        inp.mi.mouseData = 120
+                        inp.mi.dwFlags = 0x0800
+                        inp.mi.time = 0
+                        inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                        ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+                    tx = 479 + random.randint(-3, 3)
+                    ty = 299 + random.randint(-3, 3)
+                    steps = random.randint(20, 35)
+                    cx, cy = win32api.GetCursorPos()
+                    for i in range(1, steps + 1):
+                        t = i / steps
+                        t = t * t * (3 - 2 * t)
+                        nx = int(cx + (tx - cx) * t)
+                        ny = int(cy + (ty - cy) * t)
+                        _send_mouse_move(nx, ny)
+                        time.sleep(random.uniform(0.008, 0.018))
+
+                    for _ in range(12):
+                        if stop.is_set(): return
+                        _send_scroll_up()
+                        time.sleep(random.uniform(0.04, 0.08))
 
                     nav_pynput = _nav_key_pynput()
                     kb.press(nav_pynput)
@@ -1580,10 +1816,12 @@ class DashboardTab(QWidget):
                         if stop.is_set(): return
                         _step(0.3)
 
+                    self._set_action("Buying seeds...")
                     _buy_seeds()
                     if stop.is_set(): return
 
                 if _tools_active():
+                    self._set_action("Navigating to tool shop...")
                     _tool_shop_run()
 
             kb.press(Key.esc)
@@ -1591,6 +1829,7 @@ class DashboardTab(QWidget):
             if stop.is_set(): return
             _step(0.1)
 
+            self._set_action("Respawning...")
             kb.press('r')
             kb.release('r')
             if stop.is_set(): return
@@ -1599,11 +1838,12 @@ class DashboardTab(QWidget):
             kb.press(Key.enter)
             kb.release(Key.enter)
             if stop.is_set(): return
-            _step(4)
+            _step(3.5)
 
+            self._set_action("Walking to shop...")
             if stop.is_set(): return
             kb.press('i')
-            _step(0.5)
+            _step(1.2)
             kb.release('i')
             if stop.is_set(): return
             _step(0.1)
@@ -1619,11 +1859,18 @@ class DashboardTab(QWidget):
                 while not stop.is_set():
                     if _next_5min_seconds() <= 1:
                         break
+                    self._set_action("Waiting for shop timer...")
                     _step(0.5)
                 if stop.is_set(): return
                 _shop_run()
 
-        threading.Thread(target=_sequence, daemon=True).start()
+        def _sequence_wrapper():
+            try:
+                _sequence()
+            finally:
+                self._sequence_running = False
+
+        threading.Thread(target=_sequence_wrapper, daemon=True).start()
 
     def _tick(self):
         if self._running:
@@ -1854,7 +2101,7 @@ class SettingsTab(QWidget):
         add_sep()
 
         w4, r4 = make_row("Version")
-        v = QLabel("1.0.0"); v.setObjectName("settingVal"); v.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        v = QLabel("1.1"); v.setObjectName("settingVal"); v.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         r4.addStretch(); r4.addWidget(v)
         cl.addWidget(w4)
 
@@ -1977,6 +2224,7 @@ class MainWindow(QWidget):
 
         cl.addWidget(self._tabs)
 
+        self._dash._nav_dashboard = lambda: self._tabs.setCurrentIndex(0)
         self._dash._nav_seeds = lambda: self._tabs.setCurrentIndex(1)
         self._dash._nav_tools = lambda: self._tabs.setCurrentIndex(2)
         self._dash._seeds_tab = self._seeds
@@ -1989,11 +2237,9 @@ class MainWindow(QWidget):
         self._settings._nav.key_changed.connect(self._on_nav_key)
         self._dash._nav_key = self._settings.nav_key()
 
-        # TODO: change F1 so it only triggers run_seedshop_sequence when the shop timer resets to 5:00
         self._hotkey_map = {
             self._settings.start_key(): self._dash._on_run_sequence,
             self._settings.reload_key(): self._dash.reload,
-            "F3": self._dash.toggle_espam,
         }
         self._start_global_hotkeys()
 
