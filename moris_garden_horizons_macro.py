@@ -12,11 +12,11 @@ except ImportError:
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTabWidget, QFrame, QLineEdit,
-    QGridLayout, QSizePolicy
+    QGridLayout, QSizePolicy, QScrollArea
 )
 from PySide6.QtCore import (
     Qt, QTimer, Signal, QObject, QRectF, QPointF,
-    QSize, QPropertyAnimation, QEasingCurve, Property, QMetaObject, Q_ARG
+    QSize, QPropertyAnimation, QEasingCurve, Property
 )
 from PySide6.QtGui import (
     QFont, QPixmap, QIcon, QPainter, QColor, QBrush, QPen,
@@ -32,6 +32,13 @@ except ImportError:
     _PYNPUT_OK = False
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if _WIN32_OK:
+    import ctypes as _ctypes
+    _HOOKPROC = _ctypes.WINFUNCTYPE(_ctypes.c_long, _ctypes.c_int,
+                                    _ctypes.wintypes.WPARAM, _ctypes.wintypes.LPARAM)
+else:
+    _HOOKPROC = None
 
 _REG_KEY = r"Software\GardenHorizonsMacro"
 
@@ -88,6 +95,9 @@ _HARVEST_BELL_B64 = "UklGRggUAABXRUJQVlA4WAoAAAAQAAAAdwAAdwAAQUxQSN4GAAAB8EVt27F
 _TURBO_SPRINKLER_B64 = "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"
 _FAVORITE_TOOL_B64 = "UklGRgQXAABXRUJQVlA4WAoAAAAQAAAAdwAAdwAAQUxQSJ8HAAABsIVt2yFJ0vv+hTYHrWvbtqp6bNu2bdu2p2fHtm3b00ZVdW/bLMb7HnRVZGZE7NHuQURMAP5HkAxcN4RA/tcgiVxJMvtIAK17jNv92LPPu+DcU4/aZ9P+bQGAzDYSaL/J6Y99OW3Byuqampq1KxfN/PH5y/fpUwqQ2UUCvY55obLOuWrpD7fvsgHIrCLR6bjPVtu2crTtBS8f2BFkJhEtd3hplRVJzlmSveiF7YvBDArodv1sW3KeJXvmBeuBmUMMfjWy5AJKrn2yP5gxxLjPLbnAUvTWEDBTAkZ/60guuOS3hoAZQvT52HISJb34LzAziPUftpJhqeGmFmBWoOjSGsnxpcYUKQfLC/fPDGKT6Y4cW3JcSbEc+aNuYCYQrR515NiyF/2ydB1N/mxag61Y8upTM2PXRVYcybPv3n63Csvy+J5jT35lmRXH8mc9wQwg2jxnOaZc9/5OzXHA6kZ+6A523OfTKIflByBkQMCms+K55v7OYLN7LVtediACMeDVhjiOfG8pmD7iygbHlR/qgCL0+92RbfnRFggBg79wFOv73gipI7p+7CiG/EVPhIADllu2I/85AAEB+y+3mpLnbJsBAZvMtJqS5++DQLR6xJFtyysOQgDR4ZV4NSeBGXB4rRznzlIwYOAPjTny+FYgAo5aZTVh+YYSpJ83OmpKnrUNAohDF1uNyH8MBUGMrYj3ZGswZUTzR+K91gkkmt9nucmaIxvp+mW89zpmQLsXY8i154Mg+n4fQx7fAiSaPx7v+y4Z0PHNWEv3bOSQ5bH+GQKCvLrBcSb0y4D13401ZQxIlN5vOUb1aQggzqi1YkwbnQEbvB/rjz7rDPgzjuXX2oHEUdWxKjbKgI5vxvqr/zpHrMxh6sYIAfusjlWZBW1fiDV5FAJa/ttyrLXnkgEHrIlVUZYBLR6NNXc7FGHk3/Esv7kBAo6vjjV1eAYU3xtrzXEowqm1Oc3eGoFXNbhp+e++qQNxqdWE5YdaouMzjhxfvqYEHV614nzdJX0Bh6yxYkwow8YTrZw+6Yex0+K91C4Lxk6OYddfw5Prnau8YB+cVx3vjmbpIzp97KgpecIBz1q52NEVY36x3KS89kgQ6S+6PlJTdvT3Aufzz4/qHVOeOBIhfQG7LLBiJDLyk23A9BH9vo+n/Ehx5JVHICALiy6uc6LlbweAyWMeA4b/bSVIrr6oGfNYuHwSxddGTtQn/ZFPFqzloNGjxpSVl5eVlZeVlZWVjxtXVj7qxDlWcqwndtphm83Kx4wYNnjQgH59enfv2nW9lkUoLNH39t+mV1TNmjWrqqpq1qxZs6qqKisqpldWO9ErZs+ZXTl92tSpUyZPmvDrTz988dnbL96zY1EhiI7jndHyhF3A/AVsMceR8pow5TXyM23AAuyxzHI2N/ijTgUghv7lKJsU+eGWBQCKjpnjSBmkyL9tBqKQJYf/YSlzJH20LYlCEsWbv1VvZUzkFff3AVFgosftS6wskTz99DYgCk60O+EfS5kh176zVRGIBJLc6svISk6kgkRecncPkEgkicHjl1lZIPmvo9oiILHE+mdOsZQMLavPX+Sa1zcBiAQTpbt+3mAlwgvr8ibPu7YHSCSawLBHV1lJWLzMeZb8+0HFIJJOosPZFZYKtmLCmjzJ1S9tRBIpJEr3+V5WodaudV4l/+fyDUEilSTHPLXSKlCeZf2wf3MQqSW6XDnHUuLkVU8NB4kUE62O+N1SsiTPvnxDkEg1EcpfqLaSJNd/tX8rBKSdRI+b51rJkVc9OhQgMjCg3bF/JUeefXkXBCITiZLtvrUSEvnJVgjISqLN444SUu9XW4MZMuBHNyQk8h/DMiRgr4VWQuSlh2QIww2Wkxr5tmIwI4guHzlK0MedMiNgi1lWYuR5W2cGcVaDk6xLQkYQbZ+1EiS/2AHMiOFTEjZldGYcXZ2wVUdmA9HqUSdbHt8czIQBf1qJivxT30wI2G1hvqQ8yQt2RcgAFN0YyXmVrfxY0eVk+ojOHzrKh+TVi23lJfJbG4KpC9hyhpUHyZMuOOT9Gkt5kCs3QUgdcYHk3OWatzcN6HnVbEv5qD0RTBvR+hlHOUmuvLgHSJTu/lGNlZPlR1uDqRv6t5WLXP/JHiUgQKLvjfMs5fZLnww4uiYneckdPUECAInmB3/dYOW0cMfUodV45yjpt2NbIhCNExx63zJLsaz6y9NGDP7TiiN59ePDA4iYJNqf9IesWJE/ag+m7MDlsSRPOHtDkIhPhLFPLrcUa/rIdBEld0luOvKaV8cRATmT6HTqX5aaklcdl7buXztqQnLVpV1BIp8ENnlltSM1ZvnRlmCKArabYzUm13+8UwkC8kyi89nTLDUW+ZueqQIvi+R1JS+4oQdI5J8o3v61tZbWkefujJAeYoO3HK0j65fDm4NEIUl0v6LSkm3Ll4PpCej3m2VLXvnEsECiwCSa7/FRnWU78tNtwDT97gZF8j+ndASJwpPoecN8K1KDn2ydIqLtA7a88tnyACKZROsDv6qzvOJIEOklBj06Z8VvZ3UCiaQSGHL75OUzruqQKgAdd9xvcACRYBItxhy4aQtkIpFsIhNJBiSegWTq/n8wAFZQOCA+DwAAUD4AnQEqeAB4AD4xFohDIiEhFkuFICADBLMAamLM3y/5zzNqe/WvwT/OuJ9Kb21fyfug96X/E9hn6c9gD9Pukl5hf2i/cf3Yv+L+uXu9/v3qAf1H+79aH+2XsAeXN+zfwa/23/kftp7SGaL/yX8Of1c8hP7f+L37X+tP4t8l/dfy69WH928MXNPie+0/5T8yP7R7Td6vvp1CPxv+Wf5H8y/J07WLS/9B/nPUI9m/o/+z/v/7kf4D0rP7D01+unsBfyP+Z/5b8uv3/+qP8N4b/gH+09wD+df1f/Yflh/mfpb/ov9z+Yv+091v5f/gP9t/lP3e/w/2Cfxz+X/5P+3f5D/w/4f/8/+37suo6/VJoqPCd3neeWn70UrWP+Q98JulqpbSQbHP5diXzzc920VLOS9jrt/t0KdIezbMtW0i4ZI7+xFQCnQ45/zoEI2bsbcDeHhCLaxnbm5iHpzBElc558Cr8CxLViYeMbuuleNM9jFc+FlSNpRoIk/LPh7FyvzpC9uVCg4A92OBH3TcCzEmen8x3P57J4rsu8ZQXjxxf8wZgOl56cHIx9zpzEU+YdVelR6lDa8OARdSNw83PoYxpMW7VXeb32bdUfkBasXzhhpYlP1Q8VgRWyOXLoS5ioZvi0CwufgM/t8hnkhWbkBLbtYZLMpOFFVONNDgAP7/YBjr9qfA1E9d0X+8XFH84iGcHTIhN2g61369mmKFWD4efIocyhen75J/bY9ocV+ZAc9D/G+dwRPLnyxa9BqsfoR1ugFnZiRjgYlFfRxWOC1OW9EVipFyXbdRUU9CMq981gPho80/ruhcEL1jU/8Ht5soP5GMwxd/7cJdhLAEcuFWKxiIxctYX2ehmtKNIPLDC8X+dbWDM5QV6GzgIVvmvItB+fXtCU2iWj5oiNJ3Yqw+CvrtKcdlq271l2cKg8iWHPULebJDGn/w/MukXFEy+vXwhnKqR3yd+risDRBfbHMl9oCIEqeumfcyszyZD82isBZmFjbmdob6c41nkuiczrORvTfgVc+2bXGDwFyVsJ81TdVA6NxZGwgbZ0mQtPNgGRs/8ZsaMgvjKiR3neq1AO90WF1+QEQCv8X2nSqF/SNDEdvhchKSooytEx+f9p+//OcjcG3lvYXHUASGFLCbVRmzlZx0G8SO+R6EzwyHM6I7sr5DuLea0xGD2E0qgWaqf7+L/gXoTAAok+/Y7fN2T5OAiVcAqQ3a3tYhEbkv21Zp38k2L3vlLsJ0IyUlMv6MuF8a3Kvm+cPsXNoJQjOBHEF9ne5DStM4gquFNQgGgJYbO7+dKyrwoGvNCKglmzEcn54y4bm81rCN+BKHxf/4hsIVLDDZDjDQPZaTeR7cQ93P1+7W/cu35nYByFdvPzkTlg79DLwjRl8xGW1Ull48qAb9/Eb6a//MoFmsuImOq0rW4Vrm4FyjEnDErFeBdlEDeYB7QoAm2BZZbvz++Orlvos7zYSSBOywqXdwHlipCh3gMJ0mvEW6Fb06Zw5CtKPYbsdPs/9/4JRp95P47HgAJK5jIYzTp86LkT9qbhmu+ctmFNkyU9XaauDO/dvcc5yPmW/xqH7hYrHqAGR7Vg4dfgw8MzsxvHDniBgiH8CZdQJDX2Apq2HoDQGcjck27QuGB5r80y5dvjNv9fq6cqlAzdlSUgH69nyvO3bekocVnf8OgfyiwX91k0Ngi1zAFK0urIpVa52ne9QoWii8oPhFZMIoIGMQtfTmuEHX2f0DrDsG0weRuRSOtqycMTtZO8cTX4vS9zL4MuWv4WEK6qOoL5OTCV2yjpRwgVRhrfsItj2qpfd8qEZbs5akSd0v5N3zFYdFV1twB5r9a6ePB7x6qZDrszIclFx//N3pVFZ1uciMGPxPuP0JazvdROzpc22upiRBmQxX+Dfj+nmImkXqhCEdsHuvMfxyuri8qJLMouWNbKybo3/wlhYFrUaEZ1/+XratJyd9F0FG/UJDDkZ0h0w+Eh+nUl18IrGW6K8is14DF2EaThf2r8yQk7FG4sQjIUcpZ1L5ZtG19Ih/1LkNlHp/DkP5llUDW8OGMNa8ytPJnAmnZJjIAmvQvszowOYeN59qikEUuGMmajybjg0vKH+Puov3T4cPF+5+HUhudd1yz43UCDYiTI3m5yimX9WtTLuowb7HqcjRBfTD/ChCtQz5v7BrATZKbKVDp4SAO+lHhUDL9AVrKr0u6YAq74sjG8t+tF4DHFjEHbbAR+tlB10SqJcChDpd5k98Ce7sW8OmwWFT8iNbp/lGNJ/+XWTXx4xIuQt4lraE0wthWVMY/oJeaPVIqyd5IT+oo9MQuf459IWu0nQxFkbCIDZa93huJvcVaZJ9IK7PVi1Xu6gsUkKKXMoEn1NcIUbp8Y/QMeJk7q3K04pNGhYePNKKgp5Dmrh7i55JF60VCBoDYqmjTobzVNFzclyT5/GwaWSAQKiBUbEuHjAFzl8Hu4OphzY6ZA4k1JXm7CBXQIcClj7TcZA4Qt6knnwjxvNETaAJGygkFId9/If9BF8mVmwNemHuS3qzzaAbEOKxiflxSXiKykPz2+ESJ4L56LPeU2K/lixlmhnYiLmRqt4IxCp98gr2ouzuKMMcvzZURMmaszyet6Lc9PRPCecUKtmReknCqW84VCMZvCzVRnxUGwha2LwSY+bnvXRX00vXT5LZ/FYGtRgx5gQhvgE2mVt341XdckkbEUmey8dpRrMBRz77FpinrwTP7PFYKf19CXljIdWbO0Ce63TNGQDnlOwvNQb64yCDImQlErqoo6eW2l8BSYX8SBd5v3YuCte+tJBcDm0Pcxeg/rjM8rohgMyDQ2S0Aey1lkylVq9o+dNDHhkv4n8gKhbzgI2lQNDHVRs+p4hzmw1kQs5l6VeZVwkj5NNYO/JaH/OFqNI3cyAWCr1856KYHs+XbZekiEgizEkQrKZNnNOwqzawxTiZL2vUX8Bz6sMYcy+z/7nIn0GimReaKEQ74pbc7e2R9gJwTBncQyvh/84b3fKK3vA3en5PBEy4J7lRpzVXsseQfoNxUGXYQWWwmoZryvsKET48RDs/a8rlxF21rbKGVB+tm9d+Q1eoO/CB8/30mPtDvPIRiXzH3RZ5ahKRQdsnvfbv6f2bV4+Y8nMdyNYHwae0HcytCPyWo6Xy6uDiytJZ4VKLxwrIvZxb7EIr3lT5gcG0qYUnKsXmeM797ASXrFXt5njuCVeDzEJ8RjpLkvFOie+965UfE1+qmD+16rPbKVt9GBQcfyTD71KBv42UwoxzjDgC1S9Dp3jeDDFwODapCnvbtc6ZQkytcuz36a6ESNXHKmyKHAn8DE8rXWpn2Y4S6b91hHqQGF4gCMrN9PLQjO22OYq9QicGX3q8zfUc6SPz6ur0YSNzy2LW19O9mVBK9ZG3+iocp4NtTnBi3ol1EKJy3DFPYPBG9LwNtwc4pNetY5UbHElyEue+C3XVMecrOJazGN4kl26G8AEbH51bIEUtFmMzf27h3NBV5waIZKwLKsriK9v/gh+hgBI2ddrHktW2JIsdJrE4VFIjYl9X7s1yESEZe6nJh8t43TS/wmKgFUlraYX0ZQmJYX05hBZLMSOAhTxg86hUr2e82n3Q4vnym1UVw4kTUjKrAHHV2uuA8dk8htU2+AVm3fOb0RcyAn3D8DKuaJMtChbkudijcNgi/dY+pqaN+gh7w7uugRYbMFabEY2pCuAwsqesClLKH2D2MFjBGXmmDX3AGlW+VeGh+0bjRCYIdDHpO0b16a5+0mLHi3qSre9ywuBUWMCoYR37ZbqrThI/9NLqWQ4wKbvWQ7p0MwS+I4L6oSJ0Nn6L/eSRbIi5CLdsHWDY+jcMzlFy0Acinw+HcyI+GzF1HN2vDVxEguAqAvaMHPwv7TJWor9iXf1PMQ5r4AZTLG2J2ZiP+VGJf+esNugdrnY6p/7GEAvLl4/ghSPj2NETawAOH1D3XvdMwS+NZ0pEMMqj2Wq8Ky/TqpIl8BvsCOJDDG32/H5fuM3v2GKHXlTfp4GxxW5BKVvRJPl6fVHHmFsP/R5NU/DHi62/O5NyBga2JRTnlt3cNtHYEVVZz0Ozj6BCYPI4cSS5xOfc6vGZ9LhqPDL6ph8U3g2lVo7uicaCkt+mSwUMJfNp0Z0js2z2UIg0lEKjeQu+rvqHlkvgohNFDqBVvpqR5lT3uPfKqtJa9Ybi0pINXr0ITq6CEKmCJLjOxRcAb3K188tV4uUgNaCDh+QgA5kFM19dKbJuKn+PxGqC7ds7//tQCh3izwCOrgGaHxZw0EZ1gF/isW/Xb9q04NDA/MnGFO7Ae+q0UeTOWfNp4AKOUDF/Cwbr0FwSHdpVEIKR6xUWruYq9vfjThnywO6+T0i9klto4i0vlYt07XV3CXBcKQwpkpTde2fTc62pDMocpvcRpss0eATZv3CJfuG2ksLjHJ7r9SgPspr4JLDqYYwn1yGh6rZdXW1hCodqQk2Lq+nq85KCt5eu95rdzEDIP3UO0KF3lMsq8xnDEHRTLYF1yizssQMotuLLuXdyhpv6ix1wD2NtHoY3eVykqd3eXcZ+q8DB0y3gCL5fkG9co93KPG9RhANQZpQGAsECsukl8sAf4gJFSxLymtIQNsk1gcKYd2WDNyXyS5l573POCpSxoPxNhvUiaTFnv5z4YXsD9013/3MEUBD8UN+m/gGcDdyKsfoGYyk8vgliQxptjFtruT+lp4sVdR3PYnzB27JS2e18K/8ZlnZLebPoxUbkEm0hZoh3acwDSl5WDR6ZK+lbmdCmWsJg178Dsq128o6jjbXxIF2n9vNM4Em+QsMUo971g97ypWtk+2gs+O1aoErNE8sbGeAhx24TAgBYbk5iOCrT0zlj5IBnRML952VTK3m2YkcHX6du4LyMNqp1L9OW1oW7xzSxQfncxL1UdA4v4Q5gvk8rEbnRJdYfxInHR2TtY/4xi4aAsReA6Nv80YcZrauMB35pT5gwXxiCJkSQh/+67jTarxaeSWWbYP6lWyQ7Pmb1s16iTdC8SGHZjkYqYwwcct/ZjnrtWz3CUMlwOXDOgmCW9Huq8T6v+0YgNtyrE5lgOxzJEvXEz5FBpnt6vZbkp5R2QkRlCHQFdC/033gtOPem8mGI2nRdvjG8UUvgNqul7qnb01PDmnYbfC+PJt81ZIMJYJZXZOmeCF8XToFiKsb2+Vu6ssRK9wAAAAAAAAA="
 _SUPER_SPRINKLER_B64 = "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"
+
+
+_TROWEL_B64 = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAYCAYAAACbU/80AAAEjElEQVR4nLWVW2xUVRSG/33O6VzOXLDtUKSlLRWG1l6EVttGgQKJJfGlsUHF25NKgkHBROMl+mSjJho1McRA8MEoRUChDSipICBEamJlsAyptJRCb3O/MNOZOXPmXJYPOogXCqXDv1/2w9prf9nrX3sBAIgIadILk4rSpJBeQ0SFRMSdPT+KkKTAHwridknIbtznhje6XP2bGcelbVaL1zE3/8xdZaXHCk3CyY4dB/1xOQMbnwETrLcFgA+HIjUjY4EizmhARvaW8QzN+faBZ0pL5/e3P7T6c5shb0+/+1KYiMAYyzkA8RwvMcZBVTWkJBmMMSQlxTDuizQODY/WD1U7H17RuLQDwE+aphPPczkByGbRRZtpMJmMIx6bgq7p0FQVmqpA1wn+wBWh54efWzt3H9h1bmBwA8cxA5GWE4CrHigvmefKt4vJycCUxWAwgqADIIAIjOPA5Rlw9sLYgmg8/qGUSBU0NtV/TETybMvBAQBjDMVFjjOLK8r6SckAIBAA4JrkDDBZLBidjFh3f33oLVffbxsB8LO6HX+XAAwsfE9NZWeBXVRVVflXGPtzEUG0WjF8KWg5cqT3FVmSqnIGAAC1Vc79S2urfpHicZCu/eV2DiCGVCKFjKxAVVToOpCS0mYwMuQMgDEGjzfoW35/w3sV84si3stexMIJZCQFpAFyWkHQH0XQF4aR13FvQ/VJo0kcJKLcAABAaek8VCws6WlrX/uus3x+MuL1IjDhg3fMg0Q0gfSUBCkpIc8oQM5o5ROjnuWMMcwG4j8W1nQdHGNG97nBZw/3nHj54sj4AmIgURQzc+xW6fehUUcglOSYksTalvqxp55of6nEubAbAN1KR/zvCUXVIPAc5LRc5fX57iaCLopipGhuYfqLnd0fdX7ZvcKWCqJmTgZ1q1Z7Wh55bPO8RZX7AZ0Ym1ljXBc5GotBV3WEgmGAAXb7HFhEM6auJFd37dm3I3TiwOKlZTJkzgDLomZPQ1v7luJFy/bNFGLaN4tEQ7Db7AA4pNIp2Cw2MMYQnfSv6d23c3vQ3eMsvENDOEawO5s9zW1Pvli8pG4/gJueF9N+6AX5DgiCAYIgwG61I2u49ze8evyBdeufd9Q+eDEY4ZBvAhIX+op7u/d+Mj7gfhQApyk391ULNw75p7IQpYwd7Rsa2XT8Smr7yOlj5Q4RGD/5Y0k4xj5d/rihpLaucpsqKWnBnDdtvlsaaYwxjBPhTmfF96vWP72poG7N+KRfh6oA/WN+x7dHT73jcg28yZsES3oqOX2uWwHIKtv/kwPD677buWtbr3vQYVhSB07gMddqlte2NG5duaq5A0Dsep6YcQmuVbYcJdWLu+5rb6s4rxx6eyIwZTbbTBgKRIy+Se+WdEY2tra2vAYglXOAqxA66Q2Ny7YmKWP+5qvDrw9e9ImC0YRoMCFcHvWsAGC5bQAAwDgGVVXTK5uaPuB5Qd+769Abw0MTlurKBVJ9fc1nAEK5uOeGSmsyiMh4yvXrls7dXQf7TrufIyLzbAfWjJQhBUTEEZF58wsdkBV12vg/AJpwHGwlBp+gAAAAAElFTkSuQmCC"
 
 
 def _pixmap_from_b64(b64str):
@@ -288,6 +298,18 @@ QPushButton#btnReload:hover {{
 }}
 QPushButton#btnReload:pressed {{
     background: {'rgba(137,223,255,0.22)' if d else 'rgba(0,113,168,0.19)'};
+}}
+QPushButton#btnTest {{
+    background: {'rgba(255,160,50,0.13)' if d else 'rgba(180,90,0,0.08)'};
+    border: 1px solid {'rgba(255,160,50,0.45)' if d else 'rgba(180,90,0,0.35)'};
+    color: {'#ffb040' if d else '#b45a00'}; font-size: 12px; font-weight: 700;
+    padding: 5px 14px; border-radius: 7px;
+}}
+QPushButton#btnTest:hover {{
+    background: {'rgba(255,160,50,0.22)' if d else 'rgba(180,90,0,0.15)'};
+}}
+QPushButton#btnTest:pressed {{
+    background: {'rgba(255,160,50,0.32)' if d else 'rgba(180,90,0,0.24)'};
 }}
 
 QPushButton#btnClose {{
@@ -496,6 +518,26 @@ def icon_tab(name, color, size=13):
             p.setBrush(QBrush(c))
             p.drawEllipse(QRectF(bx - 1.4, cy - yh - 1.4, 2.8, 2.8))
             p.setBrush(Qt.NoBrush)
+
+    elif name == "harvest":
+        pen = QPen(c, 1.3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        p.setPen(pen); p.setBrush(Qt.NoBrush)
+        handle = QPainterPath()
+        handle.moveTo(cx - 3.5, cy - 1.5)
+        handle.cubicTo(cx - 3.5, cy - 7.0, cx + 3.5, cy - 7.0, cx + 3.5, cy - 1.5)
+        p.drawPath(handle)
+        basket = QPainterPath()
+        basket.moveTo(cx - 5.2, cy - 1.5)
+        basket.lineTo(cx - 3.8, cy + 5.0)
+        basket.lineTo(cx + 3.8, cy + 5.0)
+        basket.lineTo(cx + 5.2, cy - 1.5)
+        basket.closeSubpath()
+        p.setBrush(QBrush(c))
+        p.setPen(Qt.NoPen)
+        p.drawPath(basket)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(c, 1.3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.drawLine(QPointF(cx - 5.5, cy - 1.5), QPointF(cx + 5.5, cy - 1.5))
 
     p.end()
     return QIcon(pm)
@@ -863,7 +905,9 @@ class DashboardTab(QWidget):
         self._nav_key = "\\"
         self._seeds_tab = None
         self._tools_tab = None
+        self._harvest_tab = None
         self._sequence_stop = threading.Event()
+        self._cycle_counter = 0
 
         lo = QVBoxLayout(self)
         lo.setContentsMargins(12, 9, 12, 13)
@@ -873,8 +917,9 @@ class DashboardTab(QWidget):
         self._sc, self._status_lbl = self._stat_card("STATUS", "Stopped")
         self._ec, self._elapsed_lbl = self._stat_card("TIME ELAPSED", "00:00:00")
         self._shc, self._shop_lbl = self._stat_card("SHOP TIMER", self._fmt_shop())
+        self._cc, self._cycle_lbl = self._stat_card("CYCLES", "0")
         self._status_lbl.setObjectName("statusStopped")
-        for c in [self._sc, self._ec, self._shc]:
+        for c in [self._sc, self._ec, self._shc, self._cc]:
             c.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             stat_row.addWidget(c)
         lo.addLayout(stat_row)
@@ -1003,11 +1048,7 @@ class DashboardTab(QWidget):
         w.style().unpolish(w); w.style().polish(w); w.update()
 
     def _set_action(self, text):
-        QMetaObject.invokeMethod(
-            self._action_lbl, "setText",
-            Qt.QueuedConnection,
-            Q_ARG(str, text)
-        )
+        QTimer.singleShot(0, lambda t=text: self._action_lbl.setText(t))
 
     def update_start_label(self, key):
         self._btn_start.setText(f"  Start  |  {key}")
@@ -1080,18 +1121,20 @@ class DashboardTab(QWidget):
         self._sequence_running = False
         self._running = False
         self._elapsed = 0
+        self._cycle_counter = 0
         self._status_lbl.setText("Stopped")
         self._status_lbl.setObjectName("statusStopped")
         self._repolish(self._status_lbl)
         self._elapsed_lbl.setText("00:00:00")
+        self._cycle_lbl.setText("0")
         self._action_lbl.setText("")
 
     def run_seedshop_sequence(self):
         if not _PYNPUT_OK:
             return
 
-        seeds_active = self._seeds_tab is not None and self._seeds_tab.is_active()
-        tools_active = self._tools_tab is not None and self._tools_tab.is_active()
+        seeds_active = self._seeds_tab is not None and self._seeds_tab.seeds_active()
+        tools_active = self._tools_tab is not None and self._tools_tab.tools_active()
         if not seeds_active and not tools_active:
             return
 
@@ -1110,6 +1153,183 @@ class DashboardTab(QWidget):
             def _nav_key_pynput():
                 nav = self._nav_key
                 return KeyCode.from_char(nav) if len(nav) == 1 else nav
+
+            def _increment_cycle_and_maybe_harvest(kb, nav_pynput):
+                self._cycle_counter += 1
+                QTimer.singleShot(0, lambda v=str(self._cycle_counter): self._cycle_lbl.setText(v))
+                if (
+                    self._harvest_tab is not None
+                    and self._harvest_tab.is_enabled()
+                    and self._harvest_tab.threshold() > 0
+                    and self._cycle_counter % self._harvest_tab.threshold() == 0
+                ):
+                    _run_auto_harvest(kb)
+
+            def _run_auto_harvest(kb):
+                route = self._harvest_tab.route() if self._harvest_tab else []
+                if not route:
+                    _run_sell_sequence(kb)
+                    return
+                self._set_action("Auto harvesting...")
+                held = set()
+                kb.press('e')
+                for entry in route:
+                    if stop.is_set():
+                        try: kb.release('e')
+                        except Exception: pass
+                        for k in list(held):
+                            try: kb.release(k)
+                            except Exception: pass
+                        held.clear()
+                        return
+                    action = entry[0]
+                    if action == "press":
+                        k = entry[1]
+                        if k not in held:
+                            held.add(k)
+                            kb.press(k)
+                    elif action == "release":
+                        k = entry[1]
+                        if k in held:
+                            held.discard(k)
+                            kb.release(k)
+                    elif action == "wait":
+                        duration = entry[1]
+                        elapsed = 0.0
+                        while elapsed < duration:
+                            if stop.is_set():
+                                try: kb.release('e')
+                                except Exception: pass
+                                for k in list(held):
+                                    try: kb.release(k)
+                                    except Exception: pass
+                                held.clear()
+                                return
+                            time.sleep(0.02)
+                            elapsed += 0.02
+                try: kb.release('e')
+                except Exception: pass
+                for k in list(held):
+                    try: kb.release(k)
+                    except Exception: pass
+                held.clear()
+                if stop.is_set(): return
+                _run_sell_sequence(kb)
+
+            def _run_sell_sequence(kb):
+                if not _WIN32_OK:
+                    return
+                self._set_action("Running sell sequence...")
+                import random, ctypes, ctypes.wintypes
+
+                class MOUSEINPUT(ctypes.Structure):
+                    _fields_ = [
+                        ("dx", ctypes.c_long),
+                        ("dy", ctypes.c_long),
+                        ("mouseData", ctypes.c_ulong),
+                        ("dwFlags", ctypes.c_ulong),
+                        ("time", ctypes.c_ulong),
+                        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                    ]
+
+                class INPUT(ctypes.Structure):
+                    class _INPUT(ctypes.Union):
+                        _fields_ = [("mi", MOUSEINPUT)]
+                    _anonymous_ = ("_input",)
+                    _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT)]
+
+                def _send_mouse_move(x, y):
+                    sw = ctypes.windll.user32.GetSystemMetrics(0)
+                    sh = ctypes.windll.user32.GetSystemMetrics(1)
+                    ax = int(x * 65535 / sw)
+                    ay = int(y * 65535 / sh)
+                    inp = INPUT()
+                    inp.type = 0
+                    inp.mi.dx = ax
+                    inp.mi.dy = ay
+                    inp.mi.mouseData = 0
+                    inp.mi.dwFlags = 0x0001 | 0x8000
+                    inp.mi.time = 0
+                    inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+                def _send_mouse_click():
+                    for flag in (0x0002, 0x0004):
+                        inp = INPUT()
+                        inp.type = 0
+                        inp.mi.dx = 0
+                        inp.mi.dy = 0
+                        inp.mi.mouseData = 0
+                        inp.mi.dwFlags = flag
+                        inp.mi.time = 0
+                        inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                        ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+                        time.sleep(random.uniform(0.05, 0.15))
+
+                tx = 626 + random.randint(-2, 2)
+                ty = 123 + random.randint(-2, 2)
+                steps = random.randint(20, 35)
+                cx, cy = win32api.GetCursorPos()
+                for i in range(1, steps + 1):
+                    t_val = i / steps
+                    t_val = t_val * t_val * (3 - 2 * t_val)
+                    _send_mouse_move(int(cx + (tx - cx) * t_val), int(cy + (ty - cy) * t_val))
+                    time.sleep(random.uniform(0.008, 0.018))
+                time.sleep(random.uniform(0.03, 0.1))
+                _send_mouse_click()
+                if stop.is_set(): return
+                _step(0.1)
+
+                kb.press('s')
+                _step(0.1)
+                kb.release('s')
+                if stop.is_set(): return
+                _step(0.1)
+
+                kb.press('e')
+                kb.release('e')
+                if stop.is_set(): return
+                _step(2.0)
+
+                tx2 = 777 + random.randint(-2, 2)
+                ty2 = 412 + random.randint(-2, 2)
+                steps2 = random.randint(20, 35)
+                cx2, cy2 = win32api.GetCursorPos()
+                for i in range(1, steps2 + 1):
+                    t_val = i / steps2
+                    t_val = t_val * t_val * (3 - 2 * t_val)
+                    _send_mouse_move(int(cx2 + (tx2 - cx2) * t_val), int(cy2 + (ty2 - cy2) * t_val))
+                    time.sleep(random.uniform(0.008, 0.018))
+                time.sleep(random.uniform(0.03, 0.1))
+                _send_mouse_click()
+                if stop.is_set(): return
+                _step(5.0)
+                if stop.is_set(): return
+                self._set_action("Returning to garden after sell...")
+
+                tx3 = 478 + random.randint(-3, 3)
+                ty3 = 122 + random.randint(-3, 3)
+                steps3 = random.randint(20, 35)
+                cx3, cy3 = win32api.GetCursorPos()
+                for i in range(1, steps3 + 1):
+                    t_v3 = i / steps3
+                    t_v3 = t_v3 * t_v3 * (3 - 2 * t_v3)
+                    _send_mouse_move(int(cx3 + (tx3 - cx3) * t_v3), int(cy3 + (ty3 - cy3) * t_v3))
+                    time.sleep(random.uniform(0.008, 0.018))
+                time.sleep(random.uniform(0.03, 0.1))
+                _send_mouse_click()
+                if stop.is_set(): return
+
+                cx4, cy4 = win32api.GetCursorPos()
+                tx4, ty4 = 480, 330
+                steps4 = random.randint(20, 35)
+                for i in range(1, steps4 + 1):
+                    t_v4 = i / steps4
+                    t_v4 = t_v4 * t_v4 * (3 - 2 * t_v4)
+                    _send_mouse_move(int(cx4 + (tx4 - cx4) * t_v4), int(cy4 + (ty4 - cy4) * t_v4))
+                    time.sleep(random.uniform(0.008, 0.018))
+
+                self._set_action("Sell sequence done.")
 
             def _return_to_garden(kb, nav_pynput):
                 self._set_action("Returning to garden...")
@@ -1214,10 +1434,14 @@ class DashboardTab(QWidget):
                     _send_mouse_move(nx2, ny2)
                     time.sleep(random.uniform(0.008, 0.018))
 
+                if not stop.is_set():
+                    _increment_cycle_and_maybe_harvest(kb, nav_pynput)
+
             seed_order = [
                 "Carrot", "Corn", "Onion", "Strawberry", "Mushroom",
                 "Beetroot", "Tomato", "Apple", "Rose", "Wheat",
                 "Banana", "Plum", "Potato", "Cabbage", "Cherry",
+                "Bamboo", "Mango",
             ]
 
             seed_position = {
@@ -1236,11 +1460,14 @@ class DashboardTab(QWidget):
                 "Potato":     24,
                 "Cabbage":    26,
                 "Cherry":     28,
+                "Bamboo":     30,
+                "Mango":      32,
             }
 
             tool_order = [
                 "Watering Can", "Basic Sprinkler", "Harvest Bell",
                 "Turbo Sprinkler", "Favorite Tool", "Super Sprinkler",
+                "Trowel",
             ]
 
             tool_position = {
@@ -1250,24 +1477,43 @@ class DashboardTab(QWidget):
                 "Turbo Sprinkler": 6,
                 "Favorite Tool":   8,
                 "Super Sprinkler": 10,
+                "Trowel":          12,
             }
 
             def _tools_active():
                 return (
                     self._tools_tab is not None
-                    and any(r.is_on() for r in self._tools_tab._rows)
+                    and any(r.is_on() for r in self._tools_tab._tool_rows)
                 )
 
             def _seeds_active():
                 return (
                     self._seeds_tab is not None
-                    and any(r.is_on() for r in self._seeds_tab._rows)
+                    and any(r.is_on() for r in self._seeds_tab._seed_rows)
                 )
 
             _OOS_SAMPLE_X = 484
             _OOS_ROW_Y = {0: 290, 1: 387, 2: 481}
             _OOS_R, _OOS_G, _OOS_B = 254, 0, 68
             _OOS_TOLERANCE = 30
+
+            _OOS_TOOL_SAMPLE_X = 483
+            _OOS_TOOL_ROW_Y = {0: 290, 1: 386, 2: 483}
+
+            def _is_no_stock_tool(nav_position):
+                if not _WIN32_OK:
+                    return False
+                try:
+                    visual_row = min(nav_position, 2)
+                    y = _OOS_TOOL_ROW_Y[visual_row]
+                    px = _pyautogui.pixel(_OOS_TOOL_SAMPLE_X, y)
+                    return (
+                        abs(px[0] - _OOS_R) <= _OOS_TOLERANCE
+                        and abs(px[1] - _OOS_G) <= _OOS_TOLERANCE
+                        and abs(px[2] - _OOS_B) <= _OOS_TOLERANCE
+                    )
+                except Exception:
+                    return False
 
             def _is_no_stock(nav_position):
                 if not _WIN32_OK:
@@ -1438,7 +1684,7 @@ class DashboardTab(QWidget):
                     if stop.is_set(): return
                     _step(0.1)
 
-                    if _is_no_stock(cursor_row):
+                    if _is_no_stock_tool(cursor_row):
                         self._set_action(f"{name} — out of stock, skipping")
                         _oos_tools.add(name)
                         last_position = tool_position[name] + 1
@@ -1457,7 +1703,7 @@ class DashboardTab(QWidget):
                         kb.press(Key.enter)
                         kb.release(Key.enter)
                         _step(0.1)
-                        if _is_no_stock(cursor_row):
+                        if _is_no_stock_tool(cursor_row):
                             _oos_tools.add(name)
                             self._set_action(f"{name} — out of stock, skipping")
                             break
@@ -1965,17 +2211,122 @@ def make_outlined_toggle_grid(items, cols, icons=None, icon_size=26, label_font_
     return w, rows
 
 
-class BuySeedsTab(QWidget):
+class _AutoBuyRow(QWidget):
+    toggled = Signal(bool)
+
+    _ICON_SIZE = 30
+    _ROW_H     = 42
+
+    def __init__(self, label, pixmap=None, parent=None):
+        super().__init__(parent)
+        self._label = label
+        self._active = False
+        self._pixmap = None
+        if pixmap and not pixmap.isNull():
+            self._pixmap = pixmap.scaled(
+                self._ICON_SIZE, self._ICON_SIZE,
+                Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+        self.setFixedHeight(self._ROW_H)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setCursor(Qt.PointingHandCursor)
+        theme.changed.connect(self.update)
+
+    def is_on(self):  return self._active
+    def name(self):   return self._label
+
+    def set_on(self, val, animate=False):
+        self._active = val
+        self.update()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self._active = not self._active
+            self.update()
+            self.toggled.emit(self._active)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        t = theme.t
+        w = self.width()
+        h = self.height()
+
+        r = QRectF(1, 1, w - 2, h - 2)
+        if self._active:
+            bg = QColor(t["accent"]); bg.setAlpha(22)
+            border = QColor(t["accent"]); border.setAlpha(140)
+        else:
+            bg = QColor(0, 0, 0, 0)
+            border = QColor(0, 0, 0, 30) if not t["is_dark"] else QColor(255, 255, 255, 30)
+
+        p.setBrush(QBrush(bg))
+        p.setPen(QPen(border, 1.0))
+        p.drawRoundedRect(r, 5, 5)
+
+        pad = 7
+        ix = pad
+        iy = (h - self._pixmap.height()) // 2 if self._pixmap else (h - self._ICON_SIZE) // 2
+        if self._pixmap:
+            if not self._active:
+                tmp = QPixmap(self._pixmap.size())
+                tmp.fill(Qt.transparent)
+                pp = QPainter(tmp)
+                pp.setOpacity(0.3)
+                pp.drawPixmap(0, 0, self._pixmap)
+                pp.end()
+                p.drawPixmap(ix, iy, tmp)
+            else:
+                p.drawPixmap(ix, iy, self._pixmap)
+
+        icon_w = self._pixmap.width() if self._pixmap else self._ICON_SIZE
+        text_x = ix + icon_w + 8
+        font = QFont()
+        font.setPixelSize(13)
+        font.setWeight(QFont.Medium if self._active else QFont.Normal)
+        p.setFont(font)
+        text_color = QColor(t["accent"]) if self._active else QColor(t.get("text", "#cccccc"))
+        p.setPen(text_color)
+        p.drawText(QRectF(text_x, 0, w - text_x - pad, h), Qt.AlignVCenter | Qt.AlignLeft, self._label)
+
+        p.end()
+
+
+class _SmoothScrollArea(QScrollArea):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._anim = QPropertyAnimation(self.verticalScrollBar(), b"value")
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.setDuration(180)
+        self._target = 0
+
+    def wheelEvent(self, e):
+        delta = e.angleDelta().y()
+        step = int(self.verticalScrollBar().singleStep() * 3.5)
+        self._target = max(
+            self.verticalScrollBar().minimum(),
+            min(self.verticalScrollBar().maximum(), self._target - (step if delta > 0 else -step))
+        )
+        self._anim.stop()
+        self._anim.setStartValue(self.verticalScrollBar().value())
+        self._anim.setEndValue(self._target)
+        self._anim.start()
+
+
+class AutoBuyTab(QWidget):
     status_changed = Signal(bool)
+    seeds_status_changed = Signal(bool)
+    tools_status_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        seeds = [
-            "Carrot", "Corn", "Onion", "Strawberry", "Mushroom",
-            "Beetroot", "Tomato", "Apple", "Rose", "Wheat",
-            "Banana", "Plum", "Potato", "Cabbage", "Cherry",
-        ]
-        lo = QVBoxLayout(self); lo.setContentsMargins(6, 6, 6, 6); lo.setSpacing(0)
+        lo = QHBoxLayout(self)
+        lo.setContentsMargins(12, 9, 12, 13)
+        lo.setSpacing(6)
+
+        self._seed_rows = []
+        self._tool_rows = []
+
         seed_icons = {
             "Carrot":     _pixmap_from_b64(_CARROT_B64),
             "Corn":       _pixmap_from_b64(_CORN_B64),
@@ -1992,37 +2343,9 @@ class BuySeedsTab(QWidget):
             "Potato":     _pixmap_from_b64(_POTATO_B64),
             "Cabbage":    _pixmap_from_b64(_CABBAGE_B64),
             "Cherry":     _pixmap_from_b64(_CHERRY_B64),
+            "Bamboo":     _pixmap_from_b64(_CARROT_B64),
+            "Mango":      _pixmap_from_b64(_CARROT_B64),
         }
-        gw, self._rows = make_outlined_toggle_grid(seeds, cols=3, icons=seed_icons)
-        lo.addWidget(gw)
-        _cfg = _reg_load()
-        saved_seeds = _cfg.get("seeds", "")
-        saved_set = set(saved_seeds.split(",")) if saved_seeds else set()
-        for r in self._rows:
-            if r.name() in saved_set:
-                r._sw.set_on(True, animate=False)
-            r.toggled.connect(lambda _: self._save_and_emit())
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self.status_changed.emit(self.is_active()))
-
-    def _save_and_emit(self):
-        _reg_save({"seeds": ",".join(self.selected())})
-        self.status_changed.emit(self.is_active())
-
-    def is_active(self): return any(r.is_on() for r in self._rows)
-    def selected(self): return [r.name() for r in self._rows if r.is_on()]
-
-
-class BuyToolsTab(QWidget):
-    status_changed = Signal(bool)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        tools = [
-            "Watering Can", "Basic Sprinkler", "Harvest Bell",
-            "Turbo Sprinkler", "Favorite Tool", "Super Sprinkler",
-        ]
-        lo = QVBoxLayout(self); lo.setContentsMargins(6, 6, 6, 6); lo.setSpacing(0)
         tool_icons = {
             "Watering Can":    _pixmap_from_b64(_WATERING_CAN_B64),
             "Basic Sprinkler": _pixmap_from_b64(_BASIC_SPRINKLER_B64),
@@ -2030,41 +2353,638 @@ class BuyToolsTab(QWidget):
             "Turbo Sprinkler": _pixmap_from_b64(_TURBO_SPRINKLER_B64),
             "Favorite Tool":   _pixmap_from_b64(_FAVORITE_TOOL_B64),
             "Super Sprinkler": _pixmap_from_b64(_SUPER_SPRINKLER_B64),
+            "Trowel":          _pixmap_from_b64(_TROWEL_B64),
         }
-        gw, self._rows = make_outlined_toggle_grid(tools, cols=2, icons=tool_icons, icon_size=52, label_font_size=14)
-        lo.addWidget(gw)
+
         _cfg = _reg_load()
-        saved_tools = _cfg.get("tools", "")
-        saved_set = set(saved_tools.split(",")) if saved_tools else set()
-        for r in self._rows:
-            if r.name() in saved_set:
-                r._sw.set_on(True, animate=False)
+        saved_seeds = set(_cfg.get("seeds", "").split(",")) if _cfg.get("seeds") else set()
+        saved_tools = set(_cfg.get("tools", "").split(",")) if _cfg.get("tools") else set()
+
+        lo.addWidget(self._make_column("SEEDS", seed_icons, saved_seeds, self._seed_rows), stretch=1)
+        lo.addWidget(self._make_column("TOOLS", tool_icons, saved_tools, self._tool_rows), stretch=1)
+
+        for r in self._seed_rows + self._tool_rows:
             r.toggled.connect(lambda _: self._save_and_emit())
+
         from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self.status_changed.emit(self.is_active()))
+        QTimer.singleShot(0, lambda: (
+            self.status_changed.emit(self.is_active()),
+            self.seeds_status_changed.emit(self.seeds_active()),
+            self.tools_status_changed.emit(self.tools_active()),
+        ))
+
+    def _make_column(self, title, icons, saved_set, row_list):
+        col = QFrame()
+        col.setObjectName("card")
+        col.setStyleSheet(f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}")
+        theme.changed.connect(lambda: col.setStyleSheet(f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"))
+        vlo = QVBoxLayout(col)
+        vlo.setContentsMargins(6, 6, 6, 6)
+        vlo.setSpacing(0)
+
+        hdr = QLabel(title)
+        hdr.setStyleSheet(
+            "font-size: 9px; letter-spacing: 0.1em; font-weight: 600;"
+            "color: palette(mid); padding-bottom: 4px;"
+        )
+        vlo.addWidget(hdr)
+
+        scroll = _SmoothScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        def _apply_scroll_style():
+            t = theme.t
+            accent = t["accent"]
+            scroll.setStyleSheet(
+                "QScrollArea { background: transparent; border: none; }"
+                "QWidget#scrollContent { background: transparent; }"
+                f"QScrollBar:vertical {{"
+                f"  width: 5px; background: transparent; margin: 2px 0 2px 0; border-radius: 2px;"
+                f"}}"
+                f"QScrollBar::handle:vertical {{"
+                f"  background: {accent}; opacity: 0.4; border-radius: 2px; min-height: 16px;"
+                f"}}"
+                f"QScrollBar::handle:vertical:hover {{"
+                f"  background: {accent};"
+                f"}}"
+                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+                "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
+            )
+
+        _apply_scroll_style()
+        theme.changed.connect(_apply_scroll_style)
+
+        content = QWidget()
+        content.setObjectName("scrollContent")
+        content_lo = QVBoxLayout(content)
+        content_lo.setContentsMargins(0, 0, 6, 0)
+        content_lo.setSpacing(3)
+
+        for name, pm in icons.items():
+            btn = _AutoBuyRow(name, pm)
+            if name in saved_set:
+                btn._active = True
+                btn.update()
+            row_list.append(btn)
+            content_lo.addWidget(btn)
+
+        content_lo.addStretch()
+        scroll.setWidget(content)
+        vlo.addWidget(scroll)
+        return col
 
     def _save_and_emit(self):
-        _reg_save({"tools": ",".join(self.selected())})
+        _reg_save({
+            "seeds": ",".join(r.name() for r in self._seed_rows if r.is_on()),
+            "tools": ",".join(r.name() for r in self._tool_rows if r.is_on()),
+        })
         self.status_changed.emit(self.is_active())
+        self.seeds_status_changed.emit(self.seeds_active())
+        self.tools_status_changed.emit(self.tools_active())
 
-    def is_active(self): return any(r.is_on() for r in self._rows)
-    def selected(self): return [r.name() for r in self._rows if r.is_on()]
+    def is_active(self):
+        return any(r.is_on() for r in self._seed_rows + self._tool_rows)
+
+    def seeds_active(self):
+        return any(r.is_on() for r in self._seed_rows)
+
+    def tools_active(self):
+        return any(r.is_on() for r in self._tool_rows)
+
+    def selected_seeds(self):
+        return [r.name() for r in self._seed_rows if r.is_on()]
+
+    def selected_tools(self):
+        return [r.name() for r in self._tool_rows if r.is_on()]
+
+    @property
+    def _rows(self):
+        return self._seed_rows + self._tool_rows
+
+
+
+
+class AutoHarvestTab(QWidget):
+    _route_text_changed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._route = []
+        self._recording = False
+        self._record_stop = threading.Event()
+        self._pressed_keys = set()
+        self._route_text_changed.connect(self._on_route_text_changed)
+
+        lo = QVBoxLayout(self)
+        lo.setContentsMargins(12, 9, 12, 13)
+        lo.setSpacing(6)
+
+        enable_card = QFrame()
+        enable_card.setObjectName("card")
+        enable_card.setStyleSheet(
+            f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+            f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+        )
+        theme.changed.connect(lambda: enable_card.setStyleSheet(
+            f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+            f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+        ))
+        ecl = QVBoxLayout(enable_card)
+        ecl.setContentsMargins(12, 2, 12, 2)
+        ecl.setSpacing(0)
+
+        ROW_H = 36
+
+        def add_sep(layout):
+            s = QFrame()
+            s.setObjectName("innerSep")
+            s.setFrameShape(QFrame.HLine)
+            s.setFixedHeight(1)
+            layout.addWidget(s)
+
+        enable_row = QWidget()
+        enable_row.setFixedHeight(ROW_H)
+        er = QHBoxLayout(enable_row)
+        er.setContentsMargins(0, 0, 0, 0)
+        er.setSpacing(0)
+        el = QLabel("Enable Auto Harvest")
+        el.setObjectName("dimText")
+        er.addWidget(el)
+        er.addStretch()
+        self._enable_sw = ToggleSwitch()
+        er.addWidget(self._enable_sw)
+        ecl.addWidget(enable_row)
+
+        add_sep(ecl)
+
+        threshold_row = QWidget()
+        threshold_row.setFixedHeight(ROW_H)
+        tr = QHBoxLayout(threshold_row)
+        tr.setContentsMargins(0, 0, 0, 0)
+        tr.setSpacing(0)
+        tl = QLabel("Run every X cycles")
+        tl.setObjectName("dimText")
+        tr.addWidget(tl)
+        tr.addStretch()
+        self._threshold_edit = QLineEdit("5")
+        self._threshold_edit.setObjectName("keyInput")
+        self._threshold_edit.setFixedSize(52, 24)
+        self._threshold_edit.setAlignment(Qt.AlignCenter)
+        tr.addWidget(self._threshold_edit)
+        ecl.addWidget(threshold_row) 
+
+        lo.addWidget(enable_card)
+
+        route_preview = QFrame()
+        route_preview.setObjectName("card")
+        route_preview.setStyleSheet(
+            f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+            f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+        )
+        theme.changed.connect(lambda: route_preview.setStyleSheet(
+            f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+            f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+        ))
+        rpl = QVBoxLayout(route_preview)
+        rpl.setContentsMargins(10, 6, 10, 6)
+        rpl.setSpacing(4)
+
+        route_hdr = QLabel("HARVEST ROUTE")
+        route_hdr.setStyleSheet(
+            "font-size: 9px; letter-spacing: 0.1em; font-weight: 600;"
+            "color: palette(mid); padding-bottom: 0px;"
+        )
+        rpl.addWidget(route_hdr, 0, Qt.AlignTop)
+
+        self._route_status = QLabel("No route recorded")
+        self._route_status.setObjectName("dimText")
+        self._route_status.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self._route_status.setWordWrap(True)
+        self._route_status.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._route_status.setMinimumHeight(0)
+        rpl.addWidget(self._route_status, 1)
+
+        route_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lo.addWidget(route_preview, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+
+        self._btn_record = QPushButton("Record Route")
+        self._btn_record.setObjectName("btnStart")
+        self._btn_record.setCursor(Qt.PointingHandCursor)
+        self._btn_record.setFixedHeight(44)
+        self._btn_record.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._btn_record.clicked.connect(self._on_record_clicked)
+
+        self._btn_clear = QPushButton("Clear Route")
+        self._btn_clear.setObjectName("btnReload")
+        self._btn_clear.setCursor(Qt.PointingHandCursor)
+        self._btn_clear.setFixedHeight(44)
+        self._btn_clear.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._btn_clear.clicked.connect(self._clear_route)
+
+        self._btn_test = QPushButton("Test Route")
+        self._btn_test.setObjectName("btnTest")
+        self._btn_test.setCursor(Qt.PointingHandCursor)
+        self._btn_test.setFixedHeight(44)
+        self._btn_test.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._btn_test.clicked.connect(self._on_test_clicked)
+
+        self._test_stop = threading.Event()
+        self._test_running = False
+
+        btn_row.addWidget(self._btn_record)
+        btn_row.addWidget(self._btn_clear)
+        btn_row.addWidget(self._btn_test)
+        lo.addLayout(btn_row)
+
+        self._route_preview = route_preview
+        self._route_preview_rpl = rpl
+        self._full_route_text = ""
+        QTimer.singleShot(0, self._init_route_preview_size)
+
+        _self = self
+        _orig_resize = route_preview.resizeEvent
+        def _rp_resize(e, _orig=_orig_resize):
+            _orig(e)
+            QTimer.singleShot(0, _self._update_route_preview_size)
+        route_preview.resizeEvent = _rp_resize
+
+        _cfg = _reg_load()
+        if _cfg.get("harvest_threshold"):
+            self._threshold_edit.setText(_cfg["harvest_threshold"])
+        saved_enabled = _cfg.get("harvest_enabled", "0") == "1"
+        if saved_enabled:
+            self._enable_sw.set_on(True)
+
+        self._enable_sw.toggled.connect(lambda v: _reg_save({"harvest_enabled": "1" if v else "0"}))
+        self._threshold_edit.textChanged.connect(lambda v: _reg_save({"harvest_threshold": v}))
+
+        route_data = _cfg.get("harvest_route", "")
+        if route_data:
+            self._load_route_from_string(route_data)
+
+    def _load_route_from_string(self, data):
+        try:
+            entries = []
+            for part in data.split("|"):
+                part = part.strip()
+                if not part:
+                    continue
+                tokens = part.split(",")
+                if tokens[0] == "press":
+                    entries.append(("press", tokens[1]))
+                elif tokens[0] == "release":
+                    entries.append(("release", tokens[1]))
+                elif tokens[0] == "wait":
+                    entries.append(("wait", float(tokens[1])))
+            if entries:
+                self._route = entries
+                self._update_route_status()
+        except Exception:
+            pass
+
+    def _route_to_string(self):
+        parts = []
+        for entry in self._route:
+            if entry[0] == "press":
+                parts.append(f"press,{entry[1]}")
+            elif entry[0] == "release":
+                parts.append(f"release,{entry[1]}")
+            elif entry[0] == "wait":
+                parts.append(f"wait,{entry[1]:.4f}")
+        return "|".join(parts)
+
+    def _init_route_preview_size(self):
+        self._update_route_preview_size()
+
+    def _update_route_preview_size(self):
+        lbl = self._route_status
+        full_text = self._full_route_text
+        if not full_text:
+            lbl.setText("")
+            return
+        fm = lbl.fontMetrics()
+        lbl_w = lbl.width()
+        if lbl_w <= 0:
+            rpl = self._route_preview_rpl
+            lbl_w = self._route_preview.width() - rpl.contentsMargins().left() - rpl.contentsMargins().right()
+        if lbl_w <= 0:
+            lbl_w = 200
+        # Compute available height from the container, not the label itself,
+        # because the label's height is driven by its own content.
+        rpl = self._route_preview_rpl
+        frame = self._route_preview
+        hdr_item = rpl.itemAt(0)
+        hdr_h = hdr_item.widget().sizeHint().height() if hdr_item and hdr_item.widget() else 0
+        margins = rpl.contentsMargins()
+        avail_h = frame.height() - margins.top() - margins.bottom() - hdr_h - rpl.spacing()
+        if avail_h <= 0:
+            lbl.setText(full_text)
+            return
+        # Let Qt word-wrap handle layout; only truncate if text exceeds available height.
+        # Binary-search the token count that fits.
+        tokens = full_text.split(" > ")
+        if len(tokens) <= 1:
+            lbl.setText(full_text)
+            return
+        # Check if everything fits first
+        full_h = fm.boundingRect(0, 0, lbl_w, 0, Qt.TextWordWrap, full_text).height()
+        if full_h <= avail_h:
+            lbl.setText(full_text)
+            return
+        # Binary search: find max number of tokens that fit with "..." appended
+        lo_i, hi_i = 1, len(tokens) - 1
+        while lo_i < hi_i:
+            mid = (lo_i + hi_i + 1) // 2
+            candidate = " > ".join(tokens[:mid]) + " > ..."
+            h = fm.boundingRect(0, 0, lbl_w, 0, Qt.TextWordWrap, candidate).height()
+            if h <= avail_h:
+                lo_i = mid
+            else:
+                hi_i = mid - 1
+        result = " > ".join(tokens[:lo_i]) + " > ..."
+        lbl.setText(result)
+
+
+    def _on_route_text_changed(self, text):
+        self._full_route_text = text
+        self._update_route_preview_size()
+
+    def _update_route_status(self):
+        self._full_route_text = self._route_status_text()
+        QTimer.singleShot(0, self._update_route_preview_size)
+
+    def _on_record_clicked(self):
+        if self._recording:
+            self._stop_recording()
+        else:
+            self._start_recording()
+
+    def _start_recording(self):
+        if not _WIN32_OK or not _PYNPUT_OK:
+            return
+        resize_roblox_window()
+        self._recording = True
+        self._route = []
+        self._pressed_keys = set()
+        self._record_stop.clear()
+        self._btn_record.setText("Stop Recording")
+        self._route_text_changed.emit("Respawning...")
+
+        _active = [False]
+        _last_event_time = [0.0]
+        _WASD = {'w', 'a', 's', 'd'}
+
+        def _refresh():
+            text = self._route_status_text() if self._route else "Waiting for first key..."
+            self._route_text_changed.emit(text)
+
+        def _on_press(key):
+            if self._record_stop.is_set():
+                return False
+            char = getattr(key, 'char', None)
+            if char is None:
+                return
+            char = char.lower()
+            if char not in _WASD:
+                return
+            if not _active[0]:
+                _active[0] = True
+                _last_event_time[0] = time.time()
+            if char in self._pressed_keys:
+                return
+            now = time.time()
+            dt = now - _last_event_time[0]
+            if dt > 0.005 and self._route:
+                self._route.append(("wait", dt))
+            _last_event_time[0] = now
+            self._pressed_keys.add(char)
+            self._route.append(("press", char))
+            _refresh()
+
+        def _on_release(key):
+            if self._record_stop.is_set():
+                return False
+            char = getattr(key, 'char', None)
+            if char is None:
+                return
+            char = char.lower()
+            if char not in _WASD or char not in self._pressed_keys:
+                return
+            if not _active[0]:
+                return
+            now = time.time()
+            dt = now - _last_event_time[0]
+            if dt > 0.005:
+                self._route.append(("wait", dt))
+            _last_event_time[0] = now
+            self._pressed_keys.discard(char)
+            self._route.append(("release", char))
+            _refresh()
+
+        def _respawn_then_arm():
+            import random
+
+            class _MI(_ctypes.Structure):
+                _fields_ = [("dx", _ctypes.c_long), ("dy", _ctypes.c_long),
+                            ("mouseData", _ctypes.c_ulong), ("dwFlags", _ctypes.c_ulong),
+                            ("time", _ctypes.c_ulong), ("dwExtraInfo", _ctypes.POINTER(_ctypes.c_ulong))]
+
+            class _INP(_ctypes.Structure):
+                class _U(_ctypes.Union):
+                    _fields_ = [("mi", _MI)]
+                _anonymous_ = ("_u",)
+                _fields_ = [("type", _ctypes.c_ulong), ("_u", _U)]
+
+            def _smm(x, y):
+                sw = _ctypes.windll.user32.GetSystemMetrics(0)
+                sh = _ctypes.windll.user32.GetSystemMetrics(1)
+                inp = _INP(); inp.type = 0
+                inp.mi.dx = int(x * 65535 / sw); inp.mi.dy = int(y * 65535 / sh)
+                inp.mi.mouseData = 0; inp.mi.dwFlags = 0x0001 | 0x8000; inp.mi.time = 0
+                inp.mi.dwExtraInfo = _ctypes.pointer(_ctypes.c_ulong(0))
+                _ctypes.windll.user32.SendInput(1, _ctypes.byref(inp), _ctypes.sizeof(inp))
+
+            tx, ty = 480, 330
+            cx, cy = win32api.GetCursorPos()
+            steps = random.randint(20, 35)
+            for i in range(1, steps + 1):
+                t_val = i / steps; t_val = t_val * t_val * (3 - 2 * t_val)
+                _smm(int(cx + (tx - cx) * t_val), int(cy + (ty - cy) * t_val))
+                time.sleep(random.uniform(0.008, 0.018))
+
+            from pynput.keyboard import Controller as _KC, Key as _Key
+            kb = _KC()
+            kb.press(_Key.esc); kb.release(_Key.esc); time.sleep(0.1)
+            kb.press('r'); kb.release('r'); time.sleep(0.1)
+            kb.press(_Key.enter); kb.release(_Key.enter); time.sleep(3.5)
+
+            if self._record_stop.is_set():
+                return
+
+            self._record_kb = _pynput_keyboard.Listener(
+                on_press=_on_press, on_release=_on_release, suppress=False)
+            self._record_kb.start()
+
+            self._route_text_changed.emit("Waiting for first key...")
+
+        threading.Thread(target=_respawn_then_arm, daemon=True).start()
+
+    def _stop_recording(self):
+        self._recording = False
+        self._record_stop.set()
+        if hasattr(self, '_record_kb') and self._record_kb is not None:
+            self._record_kb.stop()
+            self._record_kb = None
+        for k in list(self._pressed_keys):
+            self._route.append(("release", k))
+        self._pressed_keys.clear()
+        key = getattr(self, '_record_hotkey', 'F3')
+        self._btn_record.setText(f"Record Route  |  {key}")
+        self._update_route_status()
+        _reg_save({"harvest_route": self._route_to_string()})
+
+    def _clear_route(self):
+        if self._recording:
+            self._stop_recording()
+        self._route = []
+        self._update_route_status()
+        _reg_save({"harvest_route": ""})
+
+    def _on_test_clicked(self):
+        if self._test_running:
+            self._test_stop.set()
+            self._test_running = False
+            self._btn_test.setText("Test Route")
+            self._update_route_status()
+            return
+        if not self._route:
+            return
+        if not _PYNPUT_OK:
+            return
+        resize_roblox_window()
+        self._test_running = True
+        self._test_stop.clear()
+        self._btn_test.setText("Stop Test")
+        self._route_text_changed.emit("Running test...")
+
+        def _run():
+            from pynput.keyboard import Controller as _KC
+            kb = _KC()
+            route = list(self._route)
+            held = set()
+            stop = self._test_stop
+            kb.press('e')
+            for entry in route:
+                if stop.is_set():
+                    try: kb.release('e')
+                    except Exception: pass
+                    for k in list(held):
+                        try: kb.release(k)
+                        except Exception: pass
+                    held.clear()
+                    break
+                action = entry[0]
+                if action == "press":
+                    k = entry[1]
+                    if k not in held:
+                        held.add(k)
+                        kb.press(k)
+                elif action == "release":
+                    k = entry[1]
+                    if k in held:
+                        held.discard(k)
+                        kb.release(k)
+                elif action == "wait":
+                    duration = entry[1]
+                    elapsed = 0.0
+                    while elapsed < duration:
+                        if stop.is_set():
+                            try: kb.release('e')
+                            except Exception: pass
+                            break
+                        time.sleep(0.02)
+                        elapsed += 0.02
+                    if stop.is_set():
+                        for k in list(held):
+                            try: kb.release(k)
+                            except Exception: pass
+                        held.clear()
+                        break
+            else:
+                try: kb.release('e')
+                except Exception: pass
+                for k in list(held):
+                    try: kb.release(k)
+                    except Exception: pass
+            self._test_running = False
+            self._route_text_changed.emit(self._route_status_text())
+            QTimer.singleShot(0, lambda: self._btn_test.setText("Test Route"))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _route_status_text(self):
+        if not self._route:
+            return "No route recorded"
+        parts = []
+        held = {}
+        for entry in self._route:
+            if entry[0] == "press":
+                held[entry[1]] = None
+            elif entry[0] == "release":
+                k = entry[1]
+                if k in held:
+                    del held[k]
+            elif entry[0] == "wait":
+                secs = entry[1]
+                if round(secs, 1) == 0.0:
+                    continue
+                active = list(held.keys())
+                if active:
+                    parts.append("+".join(active) + f"({secs:.1f})")
+        if not parts:
+            total_wait = sum(e[1] for e in self._route if e[0] == "wait")
+            return f"Route recorded ({total_wait:.1f}s)"
+        preview = " > ".join(parts)
+        return preview
+
+    def is_enabled(self):
+        return self._enable_sw.is_on()
+
+    def update_record_label(self, key):
+        if not self._recording:
+            self._btn_record.setText(f"Record Route  |  {key}")
+
+    def threshold(self):
+        try:
+            return max(1, int(self._threshold_edit.text()))
+        except ValueError:
+            return 5
+
+    def route(self):
+        return list(self._route)
 
 
 class SettingsTab(QWidget):
     start_key_changed = Signal(str)
     reload_key_changed = Signal(str)
+    record_route_key_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        lo = QVBoxLayout(self); lo.setContentsMargins(12, 9, 12, 9); lo.setSpacing(6)
+        lo = QVBoxLayout(self); lo.setContentsMargins(12, 9, 12, 13); lo.setSpacing(6)
 
         card = QFrame(); card.setObjectName("card")
         card.setStyleSheet(f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}")
         theme.changed.connect(lambda: card.setStyleSheet(f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"))
         cl = QVBoxLayout(card); cl.setContentsMargins(12, 4, 12, 4); cl.setSpacing(0)
 
-        ROW_H = 42
+        ROW_H = 34
 
         def add_sep():
             s = QFrame(); s.setObjectName("innerSep"); s.setFrameShape(QFrame.HLine); s.setFixedHeight(1)
@@ -2093,6 +3013,13 @@ class SettingsTab(QWidget):
         cl.addWidget(w2)
         add_sep()
 
+        w2b, r2b = make_row("Record Route")
+        self._record_key = KeyCaptureEdit(_cfg.get("record_key", "F3"))
+        hint2b = QLabel("click to set"); hint2b.setObjectName("dimText")
+        r2b.addStretch(); r2b.addWidget(hint2b); r2b.addSpacing(7); r2b.addWidget(self._record_key)
+        cl.addWidget(w2b)
+        add_sep()
+
         w3, r3 = make_row("UI Navigation Key")
         self._nav = KeyCaptureEdit(_cfg.get("nav_key", "\\"))
         hint3 = QLabel("click to set"); hint3.setObjectName("dimText")
@@ -2101,33 +3028,34 @@ class SettingsTab(QWidget):
         add_sep()
 
         w4, r4 = make_row("Version")
-        v = QLabel("1.1"); v.setObjectName("settingVal"); v.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        v = QLabel("1.2"); v.setObjectName("settingVal"); v.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         r4.addStretch(); r4.addWidget(v)
         cl.addWidget(w4)
 
         lo.addWidget(card)
 
-        lo.addStretch(2)
+        lo.addStretch()
 
         discord_btn = QPushButton("Discord")
         discord_btn.setObjectName("btnDiscord")
         discord_btn.setCursor(Qt.PointingHandCursor)
-        discord_btn.setFixedHeight(36)
-        discord_btn.setStyleSheet("")
+        discord_btn.setFixedHeight(44)
+        discord_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         discord_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://discord.com/invite/2fraBuhe3m")))
         lo.addWidget(discord_btn)
-
-        lo.addStretch(1)
 
         self._start_key.key_changed.connect(self.start_key_changed)
         self._reload_key.key_changed.connect(self.reload_key_changed)
         self._start_key.key_changed.connect(lambda v: _reg_save({"start_key": v}))
         self._reload_key.key_changed.connect(lambda v: _reg_save({"reload_key": v}))
         self._nav.key_changed.connect(lambda v: _reg_save({"nav_key": v}))
+        self._record_key.key_changed.connect(self.record_route_key_changed)
+        self._record_key.key_changed.connect(lambda v: _reg_save({"record_key": v}))
 
     def nav_key(self): return self._nav.value()
     def start_key(self): return self._start_key.value()
     def reload_key(self): return self._reload_key.value()
+    def record_key(self): return self._record_key.value()
 
 
 def resize_roblox_window():
@@ -2213,35 +3141,42 @@ class MainWindow(QWidget):
         self._tabs.setIconSize(QSize(13, 13))
 
         self._dash = DashboardTab()
-        self._seeds = BuySeedsTab()
-        self._tools = BuyToolsTab()
+        self._autobuy = AutoBuyTab()
+        self._harvest = AutoHarvestTab()
         self._settings = SettingsTab()
 
         self._tabs.addTab(self._dash,     " Dashboard")
-        self._tabs.addTab(self._seeds,    " Buy Seeds")
-        self._tabs.addTab(self._tools,    " Buy Tools")
+        self._tabs.addTab(self._autobuy,  " Auto Buy")
+        self._tabs.addTab(self._harvest,  " Auto Harvest")
         self._tabs.addTab(self._settings, " Settings ")
 
         cl.addWidget(self._tabs)
 
         self._dash._nav_dashboard = lambda: self._tabs.setCurrentIndex(0)
         self._dash._nav_seeds = lambda: self._tabs.setCurrentIndex(1)
-        self._dash._nav_tools = lambda: self._tabs.setCurrentIndex(2)
-        self._dash._seeds_tab = self._seeds
-        self._dash._tools_tab = self._tools
-        self._seeds.status_changed.connect(self._dash.set_seeds_status)
-        self._tools.status_changed.connect(self._dash.set_tools_status)
+        self._dash._nav_tools = lambda: self._tabs.setCurrentIndex(1)
+        self._dash._seeds_tab = self._autobuy
+        self._dash._tools_tab = self._autobuy
+        self._dash._harvest_tab = self._harvest
+        self._autobuy.seeds_status_changed.connect(self._dash.set_seeds_status)
+        self._autobuy.tools_status_changed.connect(self._dash.set_tools_status)
 
         self._settings.start_key_changed.connect(self._on_start_key)
         self._settings.reload_key_changed.connect(self._on_reload_key)
         self._settings._nav.key_changed.connect(self._on_nav_key)
+        self._settings.record_route_key_changed.connect(self._on_record_key)
         self._dash._nav_key = self._settings.nav_key()
 
         self._hotkey_map = {
             self._settings.start_key(): self._dash._on_run_sequence,
             self._settings.reload_key(): self._dash.reload,
+            self._settings.record_key(): self._record_route_hotkey,
         }
         self._start_global_hotkeys()
+
+        record_key = self._settings.record_key()
+        self._harvest._record_hotkey = record_key
+        self._harvest.update_record_label(record_key)
 
         theme.changed.connect(self._on_theme)
         self._tabs.currentChanged.connect(self._on_tab_changed)
@@ -2339,12 +3274,26 @@ class MainWindow(QWidget):
     def _on_nav_key(self, key):
         self._dash._nav_key = key
 
+    def _record_route_hotkey(self):
+        if self._tabs.currentIndex() == 2:
+            self._harvest._on_record_clicked()
+
+    def _on_record_key(self, key):
+        old_key = next((k for k, v in self._hotkey_map.items() if v is self._record_route_hotkey), None)
+        if old_key is not None and old_key in self._hotkey_map:
+            del self._hotkey_map[old_key]
+        self._hotkey_map[key] = self._record_route_hotkey
+        self._start_global_hotkeys()
+        self._harvest._record_hotkey = key
+        self._harvest.update_record_label(key)
+
     def _refresh_tab_icons(self, active_idx):
         t = theme.t
-        names = ["dashboard", "seeds", "tools", "settings"]
+        names = ["dashboard", "autobuy", "harvest", "settings"]
         for i, name in enumerate(names):
             col = t["tab_active"] if i == active_idx else t["icon_dim"]
-            self._tabs.setTabIcon(i, icon_tab(name, col, 13))
+            icon_name = "seeds" if name == "autobuy" else name
+            self._tabs.setTabIcon(i, icon_tab(icon_name, col, 13))
 
     def _on_tab_changed(self, idx): self._refresh_tab_icons(idx)
 
