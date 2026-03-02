@@ -2709,8 +2709,7 @@ class AutoHarvestTab(QWidget):
             lbl_w = self._route_preview.width() - rpl.contentsMargins().left() - rpl.contentsMargins().right()
         if lbl_w <= 0:
             lbl_w = 200
-        # Compute available height from the container, not the label itself,
-        # because the label's height is driven by its own content.
+
         rpl = self._route_preview_rpl
         frame = self._route_preview
         hdr_item = rpl.itemAt(0)
@@ -2720,18 +2719,17 @@ class AutoHarvestTab(QWidget):
         if avail_h <= 0:
             lbl.setText(full_text)
             return
-        # Let Qt word-wrap handle layout; only truncate if text exceeds available height.
-        # Binary-search the token count that fits.
+
         tokens = full_text.split(" > ")
         if len(tokens) <= 1:
             lbl.setText(full_text)
             return
-        # Check if everything fits first
+
         full_h = fm.boundingRect(0, 0, lbl_w, 0, Qt.TextWordWrap, full_text).height()
         if full_h <= avail_h:
             lbl.setText(full_text)
             return
-        # Binary search: find max number of tokens that fit with "..." appended
+
         lo_i, hi_i = 1, len(tokens) - 1
         while lo_i < hi_i:
             mid = (lo_i + hi_i + 1) // 2
