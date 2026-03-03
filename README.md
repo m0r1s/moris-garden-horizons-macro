@@ -54,5 +54,6 @@ A Python-based Garden Horizons macro.
 
 - Make sure Roblox is actually open and you can see the game window
 - Make sure you have Ui Navigation enabled and the key set in the GUI
+- Make sure you can use Garden Slot 1 in your Private Server
 - Make sure windows scaling setting is set to 100%
 - For additional help join the discord
