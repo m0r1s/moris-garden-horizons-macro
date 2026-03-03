@@ -337,7 +337,13 @@ QLineEdit#keyInput {{
     color: {t['text']}; font-size: 12px; font-weight: 700;
     padding: 2px 7px; border-radius: 6px;
 }}
-QLineEdit#keyInput:focus {{ border: 1px solid {t['accent']}; }}
+QLineEdit#keyInput:focus {{ border: 1px solid {t['accent']}; }}QLineEdit#serverLinkEdit {{
+    background: {t['input_bg']};
+    border: 1px solid {bstr};
+    color: {t['text']}; font-size: 11px;
+    padding: 2px 7px; border-radius: 6px;
+}}
+QLineEdit#serverLinkEdit:focus {{ border: 1px solid {t['accent']}; }}
 QScrollBar:vertical {{ background: transparent; width: 4px; }}
 QScrollBar::handle:vertical {{
     background: {'rgba(255,255,255,0.13)' if d else 'rgba(0,0,0,0.13)'};
@@ -1107,6 +1113,109 @@ class DashboardTab(QWidget):
             self._status_lbl.setObjectName("statusRunning")
             self._repolish(self._status_lbl)
             self._set_action("Starting sequence...")
+
+            _cfg = _reg_load()
+            _link = _cfg.get("server_link", "").strip()
+            if _link:
+                try:
+                    import webbrowser as _wb
+                    self._set_action("Rejoining server...")
+                    _wb.open(_link)
+
+                    _TARGET_COLOR = (0x99, 0xEB, 0xD0)
+                    _TARGET_X, _TARGET_Y = 485, 548
+
+                    class _MI2(ctypes.Structure):
+                        _fields_ = [("dx", ctypes.c_long), ("dy", ctypes.c_long),
+                                    ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
+                                    ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))]
+
+                    class _INP2(ctypes.Structure):
+                        class _U2(ctypes.Union):
+                            _fields_ = [("mi", _MI2)]
+                        _anonymous_ = ("_u2",)
+                        _fields_ = [("type", ctypes.c_ulong), ("_u2", _U2)]
+
+                    def _smove2(_x, _y):
+                        try:
+                            _sw = ctypes.windll.user32.GetSystemMetrics(0)
+                            _sh = ctypes.windll.user32.GetSystemMetrics(1)
+                            _inp = _INP2(); _inp.type = 0
+                            _inp.mi.dx = int(_x * 65535 / _sw); _inp.mi.dy = int(_y * 65535 / _sh)
+                            _inp.mi.mouseData = 0; _inp.mi.dwFlags = 0x0001 | 0x8000; _inp.mi.time = 0
+                            _inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                            ctypes.windll.user32.SendInput(1, ctypes.byref(_inp), ctypes.sizeof(_inp))
+                        except Exception:
+                            pass
+
+                    def _sclick2():
+                        try:
+                            for _flag in (0x0002, 0x0004):
+                                _inp = _INP2(); _inp.type = 0
+                                _inp.mi.dx = 0; _inp.mi.dy = 0; _inp.mi.mouseData = 0
+                                _inp.mi.dwFlags = _flag; _inp.mi.time = 0
+                                _inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                                ctypes.windll.user32.SendInput(1, ctypes.byref(_inp), ctypes.sizeof(_inp))
+                                time.sleep(random.uniform(0.05, 0.15))
+                        except Exception:
+                            pass
+
+                    def _get_px(_x, _y):
+                        try:
+                            _hdc = ctypes.windll.user32.GetDC(0)
+                            _col = ctypes.windll.gdi32.GetPixel(_hdc, _x, _y)
+                            ctypes.windll.user32.ReleaseDC(0, _hdc)
+                            return (_col & 0xFF, (_col >> 8) & 0xFF, (_col >> 16) & 0xFF)
+                        except Exception:
+                            return (0, 0, 0)
+
+                    def _human_move2(_tx, _ty):
+                        try:
+                            _cx, _cy = win32api.GetCursorPos()
+                            _steps = random.randint(20, 35)
+                            for _i in range(1, _steps + 1):
+                                _t = _i / _steps; _t = _t * _t * (3 - 2 * _t)
+                                _smove2(int(_cx + (_tx - _cx) * _t), int(_cy + (_ty - _cy) * _t))
+                                time.sleep(random.uniform(0.008, 0.018))
+                        except Exception:
+                            pass
+
+                    self._set_action("Waiting for Roblox...")
+                    _hwnd = None
+                    for _ in range(30):
+                        _hwnd = resize_roblox_window()
+                        if _hwnd:
+                            break
+                        time.sleep(1)
+
+                    if _hwnd:
+                        time.sleep(1)
+                        _human_move2(480, 330)
+                        time.sleep(0.1)
+
+                        self._set_action("Waiting for join button...")
+                        for _ in range(90):
+                            _col2 = _get_px(_TARGET_X, _TARGET_Y)
+                            if all(abs(_col2[_i] - _TARGET_COLOR[_i]) <= 5 for _i in range(3)):
+                                break
+                            try:
+                                resize_roblox_window()
+                            except Exception:
+                                pass
+                            _human_move2(_TARGET_X + random.randint(-2, 2), _TARGET_Y + random.randint(-2, 2))
+                            _sclick2()
+                            time.sleep(0.3)
+
+                        _human_move2(_TARGET_X + random.randint(-2, 2), _TARGET_Y + random.randint(-2, 2))
+                        time.sleep(random.uniform(0.03, 0.1))
+                        _sclick2()
+                        _human_move2(480, 330)
+
+                        self._set_action("Joined. Starting sequence...")
+                        time.sleep(1)
+                except Exception:
+                    self._set_action("Rejoin failed, starting anyway...")
+
             self.run_seedshop_sequence()
 
     def toggle_running(self):
@@ -1282,6 +1391,11 @@ class DashboardTab(QWidget):
                 _send_mouse_click()
                 if stop.is_set(): return
                 _step(0.1)
+                try:
+                    resize_roblox_window()
+                except Exception:
+                    pass
+                _step(0.05)
 
                 kb.press('s')
                 _step(0.1)
@@ -1295,7 +1409,7 @@ class DashboardTab(QWidget):
                 _step(2.0)
 
                 tx2 = 777 + random.randint(-2, 2)
-                ty2 = 412 + random.randint(-2, 2)
+                ty2 = 369 + random.randint(-2, 2)
                 steps2 = random.randint(20, 35)
                 cx2, cy2 = win32api.GetCursorPos()
                 for i in range(1, steps2 + 1):
@@ -2100,22 +2214,6 @@ class DashboardTab(QWidget):
                     self._set_action("Navigating to tool shop...")
                     _tool_shop_run()
 
-            kb.press(Key.esc)
-            kb.release(Key.esc)
-            if stop.is_set(): return
-            _step(0.1)
-
-            self._set_action("Respawning...")
-            kb.press('r')
-            kb.release('r')
-            if stop.is_set(): return
-            _step(0.1)
-
-            kb.press(Key.enter)
-            kb.release(Key.enter)
-            if stop.is_set(): return
-            _step(3.5)
-
             self._set_action("Walking to shop...")
             if stop.is_set(): return
             kb.press('i')
@@ -2123,11 +2221,6 @@ class DashboardTab(QWidget):
             kb.release('i')
             if stop.is_set(): return
             _step(0.1)
-
-            for _ in range(7):
-                mc.scroll(0, -1)
-                if stop.is_set(): return
-                _step(0.1)
 
             _shop_run()
             if not stop.is_set():
@@ -2503,6 +2596,7 @@ class AutoBuyTab(QWidget):
 
 class AutoHarvestTab(QWidget):
     _route_text_changed = Signal(str)
+    _test_btn_text_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2627,6 +2721,7 @@ class AutoHarvestTab(QWidget):
         self._btn_test.setFixedHeight(44)
         self._btn_test.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._btn_test.clicked.connect(self._on_test_clicked)
+        self._test_btn_text_changed.connect(self._btn_test.setText)
 
         self._test_stop = threading.Event()
         self._test_running = False
@@ -2850,11 +2945,37 @@ class AutoHarvestTab(QWidget):
                 _smm(int(cx + (tx - cx) * t_val), int(cy + (ty - cy) * t_val))
                 time.sleep(random.uniform(0.008, 0.018))
 
-            from pynput.keyboard import Controller as _KC, Key as _Key
-            kb = _KC()
-            kb.press(_Key.esc); kb.release(_Key.esc); time.sleep(0.1)
-            kb.press('r'); kb.release('r'); time.sleep(0.1)
-            kb.press(_Key.enter); kb.release(_Key.enter); time.sleep(3.5)
+            class _CI(_ctypes.Structure):
+                _fields_ = [("dx", _ctypes.c_long), ("dy", _ctypes.c_long),
+                            ("mouseData", _ctypes.c_ulong), ("dwFlags", _ctypes.c_ulong),
+                            ("time", _ctypes.c_ulong), ("dwExtraInfo", _ctypes.POINTER(_ctypes.c_ulong))]
+
+            class _CINP(_ctypes.Structure):
+                class _CU(_ctypes.Union):
+                    _fields_ = [("mi", _CI)]
+                _anonymous_ = ("_cu",)
+                _fields_ = [("type", _ctypes.c_ulong), ("_cu", _CU)]
+
+            def _sclick_garden():
+                for _flag in (0x0002, 0x0004):
+                    _inp = _CINP(); _inp.type = 0
+                    _inp.mi.dx = 0; _inp.mi.dy = 0; _inp.mi.mouseData = 0
+                    _inp.mi.dwFlags = _flag; _inp.mi.time = 0
+                    _inp.mi.dwExtraInfo = _ctypes.pointer(_ctypes.c_ulong(0))
+                    _ctypes.windll.user32.SendInput(1, _ctypes.byref(_inp), _ctypes.sizeof(_inp))
+                    time.sleep(random.uniform(0.05, 0.15))
+
+            gx = 479 + random.randint(-2, 2)
+            gy = 122 + random.randint(-2, 2)
+            cx2, cy2 = win32api.GetCursorPos()
+            steps2 = random.randint(20, 35)
+            for i in range(1, steps2 + 1):
+                t2 = i / steps2; t2 = t2 * t2 * (3 - 2 * t2)
+                _smm(int(cx2 + (gx - cx2) * t2), int(cy2 + (gy - cy2) * t2))
+                time.sleep(random.uniform(0.008, 0.018))
+            time.sleep(random.uniform(0.03, 0.08))
+            _sclick_garden()
+            time.sleep(0.3)
 
             if self._record_stop.is_set():
                 return
@@ -2876,8 +2997,7 @@ class AutoHarvestTab(QWidget):
         for k in list(self._pressed_keys):
             self._route.append(("release", k))
         self._pressed_keys.clear()
-        key = getattr(self, '_record_hotkey', 'F3')
-        self._btn_record.setText(f"Record Route  |  {key}")
+        self._btn_record.setText("Record Route")
         self._update_route_status()
         _reg_save({"harvest_route": self._route_to_string()})
 
@@ -2906,6 +3026,49 @@ class AutoHarvestTab(QWidget):
         self._route_text_changed.emit("Running test...")
 
         def _run():
+            import random, ctypes, ctypes.wintypes, win32api
+
+            class _TMI(ctypes.Structure):
+                _fields_ = [("dx", ctypes.c_long), ("dy", ctypes.c_long),
+                            ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
+                            ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))]
+
+            class _TINP(ctypes.Structure):
+                class _TU(ctypes.Union):
+                    _fields_ = [("mi", _TMI)]
+                _anonymous_ = ("_tu",)
+                _fields_ = [("type", ctypes.c_ulong), ("_tu", _TU)]
+
+            def _tmove(x, y):
+                sw = ctypes.windll.user32.GetSystemMetrics(0)
+                sh = ctypes.windll.user32.GetSystemMetrics(1)
+                inp = _TINP(); inp.type = 0
+                inp.mi.dx = int(x * 65535 / sw); inp.mi.dy = int(y * 65535 / sh)
+                inp.mi.mouseData = 0; inp.mi.dwFlags = 0x0001 | 0x8000; inp.mi.time = 0
+                inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+            def _tclick():
+                for flag in (0x0002, 0x0004):
+                    inp = _TINP(); inp.type = 0
+                    inp.mi.dx = 0; inp.mi.dy = 0; inp.mi.mouseData = 0
+                    inp.mi.dwFlags = flag; inp.mi.time = 0
+                    inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+                    time.sleep(random.uniform(0.05, 0.15))
+
+            gx = 479 + random.randint(-2, 2)
+            gy = 122 + random.randint(-2, 2)
+            cx, cy = win32api.GetCursorPos()
+            steps = random.randint(20, 35)
+            for i in range(1, steps + 1):
+                t = i / steps; t = t * t * (3 - 2 * t)
+                _tmove(int(cx + (gx - cx) * t), int(cy + (gy - cy) * t))
+                time.sleep(random.uniform(0.008, 0.018))
+            time.sleep(random.uniform(0.03, 0.08))
+            _tclick()
+            time.sleep(0.3)
+
             from pynput.keyboard import Controller as _KC
             kb = _KC()
             route = list(self._route)
@@ -2956,7 +3119,7 @@ class AutoHarvestTab(QWidget):
                     except Exception: pass
             self._test_running = False
             self._route_text_changed.emit(self._route_status_text())
-            QTimer.singleShot(0, lambda: self._btn_test.setText("Test Route"))
+            self._test_btn_text_changed.emit("Test Route")
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -2988,10 +3151,6 @@ class AutoHarvestTab(QWidget):
     def is_enabled(self):
         return self._enable_sw.is_on()
 
-    def update_record_label(self, key):
-        if not self._recording:
-            self._btn_record.setText(f"Record Route  |  {key}")
-
     def threshold(self):
         try:
             return max(1, int(self._threshold_edit.text()))
@@ -3005,7 +3164,6 @@ class AutoHarvestTab(QWidget):
 class SettingsTab(QWidget):
     start_key_changed = Signal(str)
     reload_key_changed = Signal(str)
-    record_route_key_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3045,13 +3203,6 @@ class SettingsTab(QWidget):
         cl.addWidget(w2)
         add_sep()
 
-        w2b, r2b = make_row("Record Route")
-        self._record_key = KeyCaptureEdit(_cfg.get("record_key", "F3"))
-        hint2b = QLabel("click to set"); hint2b.setObjectName("dimText")
-        r2b.addStretch(); r2b.addWidget(hint2b); r2b.addSpacing(7); r2b.addWidget(self._record_key)
-        cl.addWidget(w2b)
-        add_sep()
-
         w3, r3 = make_row("UI Navigation Key")
         self._nav = KeyCaptureEdit(_cfg.get("nav_key", "\\"))
         hint3 = QLabel("click to set"); hint3.setObjectName("dimText")
@@ -3059,8 +3210,47 @@ class SettingsTab(QWidget):
         cl.addWidget(w3)
         add_sep()
 
+        w2b, r2b = make_row("Private Server Link")
+        self._server_link = QLineEdit(_cfg.get("server_link", ""))
+        self._server_link.setObjectName("serverLinkEdit")
+        self._server_link.setPlaceholderText("paste link here")
+        self._server_link.setFixedHeight(26)
+        _SL_COLLAPSED = 80
+        _SL_EXPANDED  = 210
+        self._server_link.setFixedWidth(_SL_COLLAPSED)
+        self._server_link.setMaximumWidth(_SL_COLLAPSED)
+        self._server_link_anim = QPropertyAnimation(self._server_link, b"maximumWidth")
+        self._server_link_anim.setDuration(180)
+        self._server_link_anim.setEasingCurve(QEasingCurve.OutCubic)
+        def _sl_expand():
+            self._server_link_anim.stop()
+            self._server_link.setMaximumWidth(_SL_EXPANDED)
+            self._server_link_anim.setStartValue(self._server_link.width())
+            self._server_link_anim.setEndValue(_SL_EXPANDED)
+            self._server_link_anim.start()
+        def _sl_collapse():
+            self._server_link_anim.stop()
+            self._server_link_anim.setStartValue(self._server_link.width())
+            self._server_link_anim.setEndValue(_SL_COLLAPSED)
+            self._server_link_anim.start()
+        def _sl_focus_in(ev, _orig=self._server_link.focusInEvent):
+            _orig(ev)
+            _sl_expand()
+        def _sl_focus_out(ev, _orig=self._server_link.focusOutEvent):
+            _orig(ev)
+            _sl_collapse()
+        def _sl_return_pressed():
+            _reg_save({"server_link": self._server_link.text()})
+            self._server_link.clearFocus()
+        self._server_link.focusInEvent   = _sl_focus_in
+        self._server_link.focusOutEvent  = _sl_focus_out
+        self._server_link.returnPressed.connect(_sl_return_pressed)
+        r2b.addSpacing(10); r2b.addWidget(self._server_link)
+        cl.addWidget(w2b)
+        add_sep()
+
         w4, r4 = make_row("Version")
-        v = QLabel("1.2.1"); v.setObjectName("settingVal"); v.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        v = QLabel("1.2.2"); v.setObjectName("settingVal"); v.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         r4.addStretch(); r4.addWidget(v)
         cl.addWidget(w4)
 
@@ -3081,13 +3271,11 @@ class SettingsTab(QWidget):
         self._start_key.key_changed.connect(lambda v: _reg_save({"start_key": v}))
         self._reload_key.key_changed.connect(lambda v: _reg_save({"reload_key": v}))
         self._nav.key_changed.connect(lambda v: _reg_save({"nav_key": v}))
-        self._record_key.key_changed.connect(self.record_route_key_changed)
-        self._record_key.key_changed.connect(lambda v: _reg_save({"record_key": v}))
 
     def nav_key(self): return self._nav.value()
     def start_key(self): return self._start_key.value()
     def reload_key(self): return self._reload_key.value()
-    def record_key(self): return self._record_key.value()
+    def server_link(self): return self._server_link.text()
 
 
 def resize_roblox_window():
@@ -3196,27 +3384,26 @@ class MainWindow(QWidget):
         self._settings.start_key_changed.connect(self._on_start_key)
         self._settings.reload_key_changed.connect(self._on_reload_key)
         self._settings._nav.key_changed.connect(self._on_nav_key)
-        self._settings.record_route_key_changed.connect(self._on_record_key)
         self._dash._nav_key = self._settings.nav_key()
 
         self._hotkey_map = {
             self._settings.start_key(): self._dash._on_run_sequence,
-            self._settings.reload_key(): self._dash.reload,
-            self._settings.record_key(): self._record_route_hotkey,
+            self._settings.reload_key(): self._reload_and_reset,
         }
         self._start_global_hotkeys()
-
-        record_key = self._settings.record_key()
-        self._harvest._record_hotkey = record_key
-        self._harvest.update_record_label(record_key)
 
         theme.changed.connect(self._on_theme)
         self._tabs.currentChanged.connect(self._on_tab_changed)
         self._refresh_tab_icons(0)
 
         self.resize(560, 320)
-        self.move(-10, 620)
+        self._initial_pos = (-10, 620)
+        self.move(*self._initial_pos)
         self._update_icon()
+
+    def _reload_and_reset(self):
+        self._dash.reload()
+        self.move(*self._initial_pos)
 
     def showEvent(self, e):
         super().showEvent(e)
@@ -3252,6 +3439,12 @@ class MainWindow(QWidget):
         return None
 
     def _dispatch_hotkey(self, key_str):
+        if key_str == self._settings.start_key():
+            _link = _reg_load().get("server_link", "").strip()
+            if not _link:
+                self._tabs.setCurrentIndex(3)
+                QTimer.singleShot(0, self._settings._server_link.setFocus)
+                return
         fn = self._hotkey_map.get(key_str)
         if fn is not None:
             fn()
@@ -3299,25 +3492,12 @@ class MainWindow(QWidget):
         old_key = self._settings.reload_key()
         if old_key in self._hotkey_map:
             del self._hotkey_map[old_key]
-        self._hotkey_map[key] = self._dash.reload
+        self._hotkey_map[key] = self._reload_and_reset
         self._start_global_hotkeys()
         self._dash.update_reload_label(key)
 
     def _on_nav_key(self, key):
         self._dash._nav_key = key
-
-    def _record_route_hotkey(self):
-        if self._tabs.currentIndex() == 2:
-            self._harvest._on_record_clicked()
-
-    def _on_record_key(self, key):
-        old_key = next((k for k, v in self._hotkey_map.items() if v is self._record_route_hotkey), None)
-        if old_key is not None and old_key in self._hotkey_map:
-            del self._hotkey_map[old_key]
-        self._hotkey_map[key] = self._record_route_hotkey
-        self._start_global_hotkeys()
-        self._harvest._record_hotkey = key
-        self._harvest.update_record_label(key)
 
     def _refresh_tab_icons(self, active_idx):
         t = theme.t
