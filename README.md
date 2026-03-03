@@ -7,8 +7,8 @@ A Python-based Garden Horizons macro.
 
 ## GUI Screenshot
  
-<img width="400" height="258" alt="1" src="https://github.com/user-attachments/assets/efadfcac-b8fc-4483-a2d1-c914a64ea35c" /><img width="400" height="258" alt="2" src="https://github.com/user-attachments/assets/74126ff3-e64f-4c99-a374-37db302077f9" />
-<img width="400" height="258" alt="3" src="https://github.com/user-attachments/assets/25cea99d-0146-40ea-bd70-e437068ec1eb" /><img width="400" height="258" alt="4" src="https://github.com/user-attachments/assets/37fcb3a0-df89-4074-9457-946b4fdb3928" />
+<img width="400" height="258" alt="image-Photoroom (4)" src="https://github.com/user-attachments/assets/ca728eb7-f4b7-48fe-a884-2621522ec669" /><img width="400" height="258" alt="image-Photoroom (5)" src="https://github.com/user-attachments/assets/04c11276-f7cf-4616-b276-a693c2bf6e6a" />
+<img width="400" height="258" alt="image-Photoroom (6)" src="https://github.com/user-attachments/assets/1e65391d-fd87-467d-97b7-85c5407c4fcc" /><img width="400" height="258" alt="image-Photoroom (7)" src="https://github.com/user-attachments/assets/4d910ad1-c0f4-4101-8c8c-6c7d7668cb6e" />
 
 ---
 
@@ -16,8 +16,10 @@ A Python-based Garden Horizons macro.
 
 - **Automatic Seed Purchasing**: Automatically purchases in GUI selected Seeds.
 - **Automatic Tool Purchasing**: Automatically purchases in GUI selected Tools.
+- **Automatic Harvesting**: Automatically Harvests along your custom Path.
+- **Custom Harvest Pathing**: Set your own Harvesting Route for Auto Harvest.
 - **Stock Detection**: If Seeds are out of Stock the macro skips them.
-- **Action Logging**: Logs the current macro Action in the GUI.
+- **Action Logging**: Logs the current macro Action and Current Path for Auto Harvest.
 - **Shop Timer**: The in-game shop Timer displayed in the GUI.
 - **Changeable Keybinds**: Changeable macro Hotkeys.
 - **Custom UI Navigation Key**: All UI Navigation Hotkey Support.
@@ -29,6 +31,7 @@ A Python-based Garden Horizons macro.
 
 - Python (https://www.python.org/downloads/)
 - moris_garden_horizons_macro.exe
+- A Garden Horizons Private Server Link
 - Roblox running
 
 ### Controls
@@ -41,14 +44,15 @@ A Python-based Garden Horizons macro.
 ### Getting Started
 
 1. Open Roblox and join Garden Horizons
-2. Hit `F1` to start
-3. The script will resize your Roblox window and start the auto-purchasing loop
-4. Every Shop Refresh the macro goes back to the Shop to buy the Selected Seeds/Tools
+2. Input a valid Private Server link in the Settings
+3. Hit `F1` to start
+4. The script will resize your Roblox window and start the macro loop
 
 ---
 
 ## If Something Goes Wrong
 
 - Make sure Roblox is actually open and you can see the game window
+- Make sure you have Ui Navigation enabled and the key set in the GUI
 - Make sure windows scaling setting is set to 100%
 - For additional help join the discord
