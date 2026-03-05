@@ -1,5 +1,5 @@
 import sys, os, math, threading, time
-from datetime import datetime
+from datetime import datetime, timezone
 try:
     import win32gui
     import win32con
@@ -9,10 +9,12 @@ try:
     _WIN32_OK = True
 except ImportError:
     _WIN32_OK = False
+import urllib.request
+import json as _json
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTabWidget, QFrame, QLineEdit,
-    QGridLayout, QSizePolicy, QScrollArea
+    QGridLayout, QSizePolicy, QScrollArea, QStackedWidget
 )
 from PySide6.QtCore import (
     Qt, QTimer, Signal, QObject, QRectF, QPointF,
@@ -363,6 +365,35 @@ QPushButton#btnDiscord:hover {{
 QPushButton#btnDiscord:pressed {{
     background: {'rgba(88,101,242,0.40)' if d else 'rgba(88,101,242,0.30)'};
 }}
+QPushButton#btnGuide {{
+    background: {'rgba(255,255,255,0.06)' if d else 'rgba(0,0,0,0.04)'};
+    border: 1px solid {bstr};
+    color: {t['text']};
+    font-size: 12px; font-weight: 700;
+    border-radius: 8px;
+}}
+QPushButton#btnGuide:hover {{
+    background: {'rgba(255,255,255,0.12)' if d else 'rgba(0,0,0,0.08)'};
+}}
+QPushButton#btnGuide:pressed {{
+    background: {'rgba(255,255,255,0.18)' if d else 'rgba(0,0,0,0.12)'};
+}}
+QPushButton#btnGuideSection {{
+    background: {t.get('stat_card_bg', t['card'])};
+    border: 1px solid {bstr};
+    color: {t['text']};
+    font-size: 12px; font-weight: 600;
+    border-radius: 8px;
+    text-align: left;
+    padding-left: 12px;
+}}
+QPushButton#btnGuideSection:hover {{
+    background: {'rgba(255,255,255,0.10)' if d else 'rgba(0,0,0,0.06)'};
+    border: 1px solid {t['accent']};
+}}
+QPushButton#btnGuideSection:pressed {{
+    background: {'rgba(255,255,255,0.16)' if d else 'rgba(0,0,0,0.10)'};
+}}
 QWidget#statCard {{
     background: {stat_bg};
     border: 1px solid {bstr};
@@ -524,6 +555,18 @@ def icon_tab(name, color, size=13):
             p.setBrush(QBrush(c))
             p.drawEllipse(QRectF(bx - 1.4, cy - yh - 1.4, 2.8, 2.8))
             p.setBrush(Qt.NoBrush)
+
+    elif name == "webhook":
+        p.setBrush(QBrush(c)); p.setPen(Qt.NoPen)
+        bell = QPainterPath()
+        bell.moveTo(cx, cy - 5.5)
+        bell.cubicTo(cx - 4.8, cy - 5.5, cx - 5.2, cy - 1.5, cx - 5.2, cy + 1.0)
+        bell.lineTo(cx + 5.2, cy + 1.0)
+        bell.cubicTo(cx + 5.2, cy - 1.5, cx + 4.8, cy - 5.5, cx, cy - 5.5)
+        bell.closeSubpath()
+        p.drawPath(bell)
+        p.drawRoundedRect(QRectF(cx - 5.5, cy + 1.0, 11.0, 2.0), 0.8, 0.8)
+        p.drawEllipse(QRectF(cx - 1.7, cy + 3.1, 3.4, 2.8))
 
     elif name == "harvest":
         pen = QPen(c, 1.3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
@@ -810,7 +853,7 @@ class TitleBar(QWidget):
         self._logo.setFixedSize(16, 16)
         lo.addWidget(self._logo)
 
-        lbl = QLabel("moris Garden Horizons macro")
+        lbl = QLabel("moris Garden Horizons macro v1.3")
         lbl.setObjectName("titleText")
         lo.addWidget(lbl)
         lo.addStretch()
@@ -901,19 +944,26 @@ def _next_5min_seconds():
 
 
 class DashboardTab(QWidget):
+    _trigger_rejoin = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._running = False
         self._elapsed = 0
-        self._shop = _next_5min_seconds()
         self._nav_seeds = None
         self._nav_tools = None
         self._nav_key = "\\"
         self._seeds_tab = None
         self._tools_tab = None
         self._harvest_tab = None
+        self._webhook_tab = None
+        self._settings_tab = None
+        self._session_purchases = {}
         self._sequence_stop = threading.Event()
         self._cycle_counter = 0
+        self._auto_rejoin_elapsed = 0
+        self._auto_rejoin_requested = False
+        self._trigger_rejoin.connect(self._on_run_sequence)
 
         lo = QVBoxLayout(self)
         lo.setContentsMargins(12, 9, 12, 13)
@@ -985,8 +1035,20 @@ class DashboardTab(QWidget):
         self._refresh_icons()
 
     def _fmt_shop(self):
-        rem = self._shop
+        rem = _next_5min_seconds()
         return f"{rem // 60}:{rem % 60:02d}"
+
+    def _get_stats(self):
+        h = self._elapsed // 3600
+        m = (self._elapsed % 3600) // 60
+        s = self._elapsed % 60
+        return {
+            "status":    "Running" if self._running else "Stopped",
+            "elapsed":   f"{h:02d}:{m:02d}:{s:02d}",
+            "cycles":    self._cycle_counter,
+            "shop":      self._fmt_shop(),
+            "purchases": dict(self._session_purchases),
+        }
 
     def _stat_card(self, heading, value):
         card = QFrame(); card.setObjectName("card")
@@ -1066,157 +1128,207 @@ class DashboardTab(QWidget):
         self._btn_reload.setText(f"  Reload  |  {key}")
 
     def _on_run_sequence(self):
+        if self._sequence_running or self._running:
+            return
         if hasattr(self, '_nav_dashboard'):
             self._nav_dashboard()
         if _WIN32_OK:
             import random, ctypes, ctypes.wintypes
 
-            class _MOUSEINPUT(ctypes.Structure):
-                _fields_ = [
-                    ("dx", ctypes.c_long), ("dy", ctypes.c_long),
-                    ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
-                    ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
-                ]
-
-            class _INPUT(ctypes.Structure):
-                class __INPUT(ctypes.Union):
-                    _fields_ = [("mi", _MOUSEINPUT)]
-                _anonymous_ = ("_input",)
-                _fields_ = [("type", ctypes.c_ulong), ("_input", __INPUT)]
-
-            def _send_mouse_move(x, y):
-                sw = ctypes.windll.user32.GetSystemMetrics(0)
-                sh = ctypes.windll.user32.GetSystemMetrics(1)
-                ax = int(x * 65535 / sw)
-                ay = int(y * 65535 / sh)
-                inp = _INPUT()
-                inp.type = 0
-                inp.mi.dx = ax
-                inp.mi.dy = ay
-                inp.mi.mouseData = 0
-                inp.mi.dwFlags = 0x0001 | 0x8000
-                inp.mi.time = 0
-                inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
-                ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
-
-            tx, ty = 480, 330
-            cx, cy = win32api.GetCursorPos()
-            steps = random.randint(20, 35)
-            for i in range(1, steps + 1):
-                t = i / steps
-                t = t * t * (3 - 2 * t)
-                _send_mouse_move(int(cx + (tx - cx) * t), int(cy + (ty - cy) * t))
-                time.sleep(random.uniform(0.008, 0.018))
-            resize_roblox_window()
             self._running = True
+            self._auto_rejoin_elapsed = 0
+            self._auto_rejoin_requested = False
             self._status_lbl.setText("Running")
             self._status_lbl.setObjectName("statusRunning")
             self._repolish(self._status_lbl)
             self._set_action("Starting sequence...")
 
-            _cfg = _reg_load()
-            _link = _cfg.get("server_link", "").strip()
-            if _link:
-                try:
-                    import webbrowser as _wb
-                    self._set_action("Rejoining server...")
-                    _wb.open(_link)
+            def _rejoin_then_start():
+                _stop = self._sequence_stop
+                _cfg = _reg_load()
+                _link = _cfg.get("server_link", "").strip()
+                if _link:
+                    try:
+                        import webbrowser as _wb
 
-                    _TARGET_COLOR = (0x99, 0xEB, 0xD0)
-                    _TARGET_X, _TARGET_Y = 485, 548
+                        _TARGET_COLOR = (0x99, 0xEB, 0xD0)
+                        _TARGET_X, _TARGET_Y = 485, 548
+                        _CENTER_X, _CENTER_Y = 480, 330
 
-                    class _MI2(ctypes.Structure):
-                        _fields_ = [("dx", ctypes.c_long), ("dy", ctypes.c_long),
-                                    ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
-                                    ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))]
+                        class _MI2(ctypes.Structure):
+                            _fields_ = [("dx", ctypes.c_long), ("dy", ctypes.c_long),
+                                        ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
+                                        ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))]
 
-                    class _INP2(ctypes.Structure):
-                        class _U2(ctypes.Union):
-                            _fields_ = [("mi", _MI2)]
-                        _anonymous_ = ("_u2",)
-                        _fields_ = [("type", ctypes.c_ulong), ("_u2", _U2)]
+                        class _INP2(ctypes.Structure):
+                            class _U2(ctypes.Union):
+                                _fields_ = [("mi", _MI2)]
+                            _anonymous_ = ("_u2",)
+                            _fields_ = [("type", ctypes.c_ulong), ("_u2", _U2)]
 
-                    def _smove2(_x, _y):
-                        try:
-                            _sw = ctypes.windll.user32.GetSystemMetrics(0)
-                            _sh = ctypes.windll.user32.GetSystemMetrics(1)
-                            _inp = _INP2(); _inp.type = 0
-                            _inp.mi.dx = int(_x * 65535 / _sw); _inp.mi.dy = int(_y * 65535 / _sh)
-                            _inp.mi.mouseData = 0; _inp.mi.dwFlags = 0x0001 | 0x8000; _inp.mi.time = 0
-                            _inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
-                            ctypes.windll.user32.SendInput(1, ctypes.byref(_inp), ctypes.sizeof(_inp))
-                        except Exception:
-                            pass
-
-                    def _sclick2():
-                        try:
-                            for _flag in (0x0002, 0x0004):
+                        def _smove2(_x, _y):
+                            try:
+                                _sw = ctypes.windll.user32.GetSystemMetrics(0)
+                                _sh = ctypes.windll.user32.GetSystemMetrics(1)
                                 _inp = _INP2(); _inp.type = 0
-                                _inp.mi.dx = 0; _inp.mi.dy = 0; _inp.mi.mouseData = 0
-                                _inp.mi.dwFlags = _flag; _inp.mi.time = 0
+                                _inp.mi.dx = int(_x * 65535 / _sw); _inp.mi.dy = int(_y * 65535 / _sh)
+                                _inp.mi.mouseData = 0; _inp.mi.dwFlags = 0x0001 | 0x8000; _inp.mi.time = 0
                                 _inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
                                 ctypes.windll.user32.SendInput(1, ctypes.byref(_inp), ctypes.sizeof(_inp))
-                                time.sleep(random.uniform(0.05, 0.15))
-                        except Exception:
-                            pass
-
-                    def _get_px(_x, _y):
-                        try:
-                            _hdc = ctypes.windll.user32.GetDC(0)
-                            _col = ctypes.windll.gdi32.GetPixel(_hdc, _x, _y)
-                            ctypes.windll.user32.ReleaseDC(0, _hdc)
-                            return (_col & 0xFF, (_col >> 8) & 0xFF, (_col >> 16) & 0xFF)
-                        except Exception:
-                            return (0, 0, 0)
-
-                    def _human_move2(_tx, _ty):
-                        try:
-                            _cx, _cy = win32api.GetCursorPos()
-                            _steps = random.randint(20, 35)
-                            for _i in range(1, _steps + 1):
-                                _t = _i / _steps; _t = _t * _t * (3 - 2 * _t)
-                                _smove2(int(_cx + (_tx - _cx) * _t), int(_cy + (_ty - _cy) * _t))
-                                time.sleep(random.uniform(0.008, 0.018))
-                        except Exception:
-                            pass
-
-                    self._set_action("Waiting for Roblox...")
-                    _hwnd = None
-                    for _ in range(30):
-                        _hwnd = resize_roblox_window()
-                        if _hwnd:
-                            break
-                        time.sleep(1)
-
-                    if _hwnd:
-                        time.sleep(1)
-                        _human_move2(480, 330)
-                        time.sleep(0.1)
-
-                        self._set_action("Waiting for join button...")
-                        for _ in range(90):
-                            _col2 = _get_px(_TARGET_X, _TARGET_Y)
-                            if all(abs(_col2[_i] - _TARGET_COLOR[_i]) <= 5 for _i in range(3)):
-                                break
-                            try:
-                                resize_roblox_window()
                             except Exception:
                                 pass
-                            _human_move2(_TARGET_X + random.randint(-2, 2), _TARGET_Y + random.randint(-2, 2))
+
+                        def _sclick2():
+                            try:
+                                for _flag in (0x0002, 0x0004):
+                                    _inp = _INP2(); _inp.type = 0
+                                    _inp.mi.dx = 0; _inp.mi.dy = 0; _inp.mi.mouseData = 0
+                                    _inp.mi.dwFlags = _flag; _inp.mi.time = 0
+                                    _inp.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
+                                    ctypes.windll.user32.SendInput(1, ctypes.byref(_inp), ctypes.sizeof(_inp))
+                                    time.sleep(random.uniform(0.05, 0.15))
+                            except Exception:
+                                pass
+
+                        def _get_px(_x, _y):
+                            try:
+                                _hdc = ctypes.windll.user32.GetDC(0)
+                                _col = ctypes.windll.gdi32.GetPixel(_hdc, _x, _y)
+                                ctypes.windll.user32.ReleaseDC(0, _hdc)
+                                return (_col & 0xFF, (_col >> 8) & 0xFF, (_col >> 16) & 0xFF)
+                            except Exception:
+                                return (0, 0, 0)
+
+                        def _human_move2(_tx, _ty):
+                            try:
+                                _cx, _cy = win32api.GetCursorPos()
+                                _steps = random.randint(20, 35)
+                                for _i in range(1, _steps + 1):
+                                    _t = _i / _steps; _t = _t * _t * (3 - 2 * _t)
+                                    _smove2(int(_cx + (_tx - _cx) * _t), int(_cy + (_ty - _cy) * _t))
+                                    time.sleep(random.uniform(0.008, 0.018))
+                            except Exception:
+                                pass
+
+                        def _find_roblox_hwnd():
+                            titles = ["Roblox", "RobloxPlayerBeta.exe", "RobloxPlayer.exe"]
+                            for _title in titles:
+                                if _title.endswith(".exe"):
+                                    _found = []
+                                    def _cb(_h, _extra):
+                                        _, _pid = win32process.GetWindowThreadProcessId(_h)
+                                        try:
+                                            _proc = win32api.OpenProcess(0x0410, False, _pid)
+                                            _name = win32process.GetModuleFileNameEx(_proc, 0)
+                                            if _title in _name and win32gui.IsWindowVisible(_h):
+                                                _extra.append(_h)
+                                        except Exception:
+                                            pass
+                                    win32gui.EnumWindows(_cb, _found)
+                                    if _found:
+                                        return _found[0]
+                                else:
+                                    _h = win32gui.FindWindow(None, _title)
+                                    if _h:
+                                        return _h
+                            return None
+
+                        def _hwnd_alive(_h):
+                            if not _h:
+                                return False
+                            try:
+                                return win32gui.IsWindow(_h) and win32gui.IsWindowVisible(_h)
+                            except Exception:
+                                return False
+
+                        while True:
+                            if _stop.is_set(): return
+                            _old_hwnd = _find_roblox_hwnd()
+
+                            self._set_action("Rejoining server...")
+                            _wb.open(_link)
+                            _deadline = time.time() + 7.0
+
+                            if _old_hwnd:
+                                self._set_action("Waiting for old Roblox to close...")
+                                while _hwnd_alive(_old_hwnd):
+                                    if _stop.is_set(): return
+                                    if time.time() > _deadline:
+                                        break
+                                    time.sleep(0.1)
+
+                            if _stop.is_set(): return
+                            if time.time() <= _deadline:
+                                self._set_action("Waiting for new Roblox window...")
+                                _new_hwnd = None
+                                while time.time() <= _deadline:
+                                    if _stop.is_set(): return
+                                    _candidate = _find_roblox_hwnd()
+                                    if _candidate and (_candidate != _old_hwnd or not _old_hwnd):
+                                        _new_hwnd = _candidate
+                                        break
+                                    time.sleep(0.1)
+                                if _new_hwnd:
+                                    break
+
+                            if _stop.is_set(): return
+                            self._set_action("Retrying rejoin...")
+
+                        if _stop.is_set(): return
+                        self._set_action("Waiting for Roblox to stabilize...")
+                        _stop.wait(2)
+                        if _stop.is_set(): return
+                        resize_roblox_window()
+                        _stop.wait(1)
+                        if _stop.is_set(): return
+
+                        def _roblox_focused():
+                            try:
+                                _fw = win32gui.GetForegroundWindow()
+                                _, _pid = win32process.GetWindowThreadProcessId(_fw)
+                                _proc = win32api.OpenProcess(0x0410, False, _pid)
+                                _name = win32process.GetModuleFileNameEx(_proc, 0)
+                                return "Roblox" in _name
+                            except Exception:
+                                return False
+
+                        self._set_action("Waiting for join button...")
+                        _button_found = False
+                        for _ in range(300):
+                            if _stop.is_set(): return
+                            _col2 = _get_px(_TARGET_X, _TARGET_Y)
+                            if all(abs(_col2[_i] - _TARGET_COLOR[_i]) <= 5 for _i in range(3)):
+                                _button_found = True
+                                break
+                            if not _roblox_focused():
+                                resize_roblox_window()
+                                _stop.wait(1)
+                                if _stop.is_set(): return
+                                continue
+                            _smove2(_CENTER_X + random.randint(-3, 3), _CENTER_Y + random.randint(-3, 3))
                             _sclick2()
-                            time.sleep(0.3)
+                            _stop.wait(0.3)
+                            if _stop.is_set(): return
 
-                        _human_move2(_TARGET_X + random.randint(-2, 2), _TARGET_Y + random.randint(-2, 2))
-                        time.sleep(random.uniform(0.03, 0.1))
-                        _sclick2()
-                        _human_move2(480, 330)
+                        if _button_found:
+                            _human_move2(_TARGET_X + random.randint(-2, 2), _TARGET_Y + random.randint(-2, 2))
+                            time.sleep(random.uniform(0.05, 0.12))
+                            _sclick2()
+                            time.sleep(random.uniform(0.05, 0.12))
+                            _sclick2()
 
+                        if _stop.is_set(): return
                         self._set_action("Joined. Starting sequence...")
-                        time.sleep(1)
-                except Exception:
-                    self._set_action("Rejoin failed, starting anyway...")
+                        _stop.wait(2)
+                        if _stop.is_set(): return
+                    except Exception:
+                        if _stop.is_set(): return
+                        self._set_action("Rejoin failed, starting anyway...")
 
-            self.run_seedshop_sequence()
+                if not _stop.is_set():
+                    self.run_seedshop_sequence()
+
+            threading.Thread(target=_rejoin_then_start, daemon=True).start()
 
     def toggle_running(self):
         self._running = not self._running
@@ -1234,6 +1346,9 @@ class DashboardTab(QWidget):
         self._running = False
         self._elapsed = 0
         self._cycle_counter = 0
+        self._auto_rejoin_elapsed = 0
+        self._auto_rejoin_requested = False
+        self._sequence_stop = threading.Event()
         self._status_lbl.setText("Stopped")
         self._status_lbl.setObjectName("statusStopped")
         self._repolish(self._status_lbl)
@@ -1262,6 +1377,10 @@ class DashboardTab(QWidget):
             kb = KeyboardController()
             mc = MouseController()
 
+            self._session_purchases = {}
+            if self._webhook_tab is not None:
+                self._webhook_tab._on_start(self._get_stats())
+
             def _nav_key_pynput():
                 nav = self._nav_key
                 return KeyCode.from_char(nav) if len(nav) == 1 else nav
@@ -1269,6 +1388,8 @@ class DashboardTab(QWidget):
             def _increment_cycle_and_maybe_harvest(kb, nav_pynput):
                 self._cycle_counter += 1
                 QMetaObject.invokeMethod(self._cycle_lbl, "setText", Qt.QueuedConnection, Q_ARG(str, str(self._cycle_counter)))
+                if self._webhook_tab is not None:
+                    self._webhook_tab._on_cycle(self._get_stats())
                 if (
                     self._harvest_tab is not None
                     and self._harvest_tab.is_enabled()
@@ -1763,6 +1884,10 @@ class DashboardTab(QWidget):
 
                     last_position = seed_position[name] + 1
 
+                    self._session_purchases[name] = self._session_purchases.get(name, 0) + 1
+                    if self._webhook_tab is not None:
+                        self._webhook_tab._on_purchase(name, "seed", self._get_stats())
+
                     is_last = not any(enabled[n] for n in seed_order[idx + 1:])
                     if is_last:
                         if stop.is_set(): return
@@ -1854,6 +1979,10 @@ class DashboardTab(QWidget):
 
                     last_position = tool_position[name] + 1
 
+                    self._session_purchases[name] = self._session_purchases.get(name, 0) + 1
+                    if self._webhook_tab is not None:
+                        self._webhook_tab._on_purchase(name, "tool", self._get_stats())
+
                     is_last = not any(enabled[n] for n in tool_order[idx + 1:])
                     if is_last:
                         if stop.is_set(): return
@@ -1942,11 +2071,13 @@ class DashboardTab(QWidget):
                     detected = False
                     while time.time() < deadline:
                         if stop.is_set(): return
-                        px = win32gui.GetPixel(win32gui.GetDC(0), 403, 236)
+                        _hdc = win32gui.GetDC(0)
+                        px = win32gui.GetPixel(_hdc, 627, 414)
+                        win32gui.ReleaseDC(0, _hdc)
                         r = px & 0xFF
                         g = (px >> 8) & 0xFF
                         b = (px >> 16) & 0xFF
-                        if (r, g, b) == (0xC4, 0xCD, 0xE0):
+                        if (r, g, b) == (0x84, 0x17, 0x2B):
                             detected = True
                             break
                         time.sleep(0.05)
@@ -2115,11 +2246,13 @@ class DashboardTab(QWidget):
                         detected = False
                         while time.time() < deadline:
                             if stop.is_set(): return
-                            px = win32gui.GetPixel(win32gui.GetDC(0), 405, 205)
+                            _hdc = win32gui.GetDC(0)
+                            px = win32gui.GetPixel(_hdc, 628, 402)
+                            win32gui.ReleaseDC(0, _hdc)
                             r = px & 0xFF
                             g = (px >> 8) & 0xFF
                             b = (px >> 16) & 0xFF
-                            if (r, g, b) == (0xFF, 0xE7, 0xDF):
+                            if (r, g, b) == (0x8E, 0x0B, 0x1E):
                                 detected = True
                                 break
                             time.sleep(0.05)
@@ -2216,15 +2349,12 @@ class DashboardTab(QWidget):
 
             self._set_action("Walking to shop...")
             if stop.is_set(): return
-            kb.press('i')
-            _step(1.5)
-            kb.release('i')
-            if stop.is_set(): return
-            _step(0.1)
 
             _shop_run()
             if not stop.is_set():
                 _increment_cycle_and_maybe_harvest(kb, _nav_key_pynput())
+                if self._auto_rejoin_requested:
+                    stop.set()
 
             while not stop.is_set():
                 while not stop.is_set():
@@ -2236,22 +2366,47 @@ class DashboardTab(QWidget):
                 _shop_run()
                 if not stop.is_set():
                     _increment_cycle_and_maybe_harvest(kb, _nav_key_pynput())
+                    if self._auto_rejoin_requested:
+                        stop.set()
 
         def _sequence_wrapper():
+            pending_rejoin = False
             try:
                 _sequence()
             finally:
                 self._sequence_running = False
+                pending_rejoin = self._auto_rejoin_requested
+
+            if pending_rejoin and not self._sequence_stop.is_set():
+                self._auto_rejoin_requested = False
+                self._trigger_rejoin.emit()
 
         threading.Thread(target=_sequence_wrapper, daemon=True).start()
 
     def _tick(self):
         if self._running:
             self._elapsed += 1
+            self._auto_rejoin_elapsed += 1
+            self._check_auto_rejoin()
         h = self._elapsed // 3600; m = (self._elapsed % 3600) // 60; s = self._elapsed % 60
         self._elapsed_lbl.setText(f"{h:02d}:{m:02d}:{s:02d}")
-        self._shop = _next_5min_seconds()
         self._shop_lbl.setText(self._fmt_shop())
+
+    def _check_auto_rejoin(self):
+        settings = self._settings_tab
+        if settings is None or self._auto_rejoin_requested:
+            return
+        try:
+            hours = float(settings.auto_rejoin_hours() or 0)
+            interval_secs = int(hours * 3600)
+            if interval_secs <= 0:
+                return
+            if self._auto_rejoin_elapsed >= interval_secs:
+                self._auto_rejoin_elapsed = 0
+                self._auto_rejoin_requested = True
+                self._set_action("Auto rejoin scheduled after current cycle...")
+        except Exception:
+            pass
 
 
 class OutlinedToggleRow(QWidget):
@@ -3161,13 +3316,119 @@ class AutoHarvestTab(QWidget):
         return list(self._route)
 
 
+_GUIDE_TEXT = [
+    ("SETUP GUIDE (STEP-BY-STEP)", [
+        "Download the latest .exe file.",
+        "Open the Settings tab and enter your private server link.",
+        "In the Settings tab, set your UI Navigation key.",
+        "In Roblox, enable UI Navigation in the game settings.",
+        "Configure the macro to your preferences.",
+        "Press F1 to start. (You do not need to have Roblox open.)",
+    ]),
+    ("GENERAL TROUBLESHOOTING CHECKLIST", [
+        "Make sure you are using the latest version of the macro.",
+        "Confirm you are using the standard browser version of Roblox (not the Microsoft Store version).",
+        "Set your Windows display scaling to 100%.",
+        "Ensure Windows HDR is turned off.",
+        "Confirm that UI Navigation is enabled in Roblox.",
+        "Verify the correct UI Navigation key is set in the macro settings.",
+        "Check that your private server link is entered correctly in the macro settings.",
+        "Make sure your private server link is active and working.",
+        "Ensure Private Server Slot 1 is available.",
+    ]),
+    ("HOW TO USE AUTO HARVEST", [
+        "Press F1 to allow the macro to rejoin and align your camera.",
+        "Do NOT move your camera after this point.",
+        "Open the Auto Harvest tab in the GUI and click \"Record Route.\"",
+        "After the macro teleports you back to your garden, begin recording.",
+        "Walk the route you want the macro to follow throughout your garden.\n   - Do NOT jump while recording.",
+        "When finished, click \"Stop Recording.\"",
+        "Click \"Test Route\" to verify the path works correctly.",
+        "If satisfied, set how many cycles you want Auto Harvest to run.",
+        "Enable Auto Harvest and press F1 to start.",
+    ]),
+    ("HOW TO CREATE A WEBHOOK URL (DISCORD)", [
+        "Create a server in Discord.",
+        "Inside the new server, create a text channel.",
+        "Click the Settings icon for that text channel.",
+        "Go to \"Integrations\" and select \"Create Webhook.\"",
+        "Click the newly created webhook to expand its options.",
+        "Select \"Copy Webhook URL.\"",
+        "Paste the URL into the macro using Ctrl + V.",
+    ]),
+]
+
+
+class _BackArrowIcon(QWidget):
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(28, 28)
+        self.setCursor(Qt.PointingHandCursor)
+        self._hovered = False
+
+    def enterEvent(self, e):
+        self._hovered = True
+        self.update()
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(e)
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(e)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        t = theme.t
+        base_color = QColor(t["text"])
+        color = QColor(base_color)
+        color.setAlphaF(0.85 if self._hovered else 0.55)
+        pen = QPen(color)
+        pen.setWidthF(2.0)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+        cx, cy = 14.0, 14.0
+        path = QPainterPath()
+        path.moveTo(cx + 5, cy - 5)
+        path.lineTo(cx - 4, cy)
+        path.lineTo(cx + 5, cy + 5)
+        p.drawPath(path)
+        p.end()
+
+
 class SettingsTab(QWidget):
     start_key_changed = Signal(str)
     reload_key_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        lo = QVBoxLayout(self); lo.setContentsMargins(12, 9, 12, 13); lo.setSpacing(6)
+        self._stack = QStackedWidget(self)
+        root_lo = QVBoxLayout(self)
+        root_lo.setContentsMargins(0, 0, 0, 0)
+        root_lo.setSpacing(0)
+        root_lo.addWidget(self._stack)
+
+        self._main_page = QWidget()
+        self._guide_page = QWidget()
+        self._stack.addWidget(self._main_page)
+        self._stack.addWidget(self._guide_page)
+
+        self._build_main_page()
+        self._build_guide_page()
+
+    def _build_main_page(self):
+        lo = QVBoxLayout(self._main_page)
+        lo.setContentsMargins(12, 9, 12, 13)
+        lo.setSpacing(6)
 
         card = QFrame(); card.setObjectName("card")
         card.setStyleSheet(f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}")
@@ -3215,48 +3476,42 @@ class SettingsTab(QWidget):
         self._server_link.setObjectName("serverLinkEdit")
         self._server_link.setPlaceholderText("paste link here")
         self._server_link.setFixedHeight(26)
-        _SL_COLLAPSED = 80
-        _SL_EXPANDED  = 210
-        self._server_link.setFixedWidth(_SL_COLLAPSED)
-        self._server_link.setMaximumWidth(_SL_COLLAPSED)
-        self._server_link_anim = QPropertyAnimation(self._server_link, b"maximumWidth")
-        self._server_link_anim.setDuration(180)
-        self._server_link_anim.setEasingCurve(QEasingCurve.OutCubic)
-        def _sl_expand():
-            self._server_link_anim.stop()
-            self._server_link.setMaximumWidth(_SL_EXPANDED)
-            self._server_link_anim.setStartValue(self._server_link.width())
-            self._server_link_anim.setEndValue(_SL_EXPANDED)
-            self._server_link_anim.start()
-        def _sl_collapse():
-            self._server_link_anim.stop()
-            self._server_link_anim.setStartValue(self._server_link.width())
-            self._server_link_anim.setEndValue(_SL_COLLAPSED)
-            self._server_link_anim.start()
-        def _sl_focus_in(ev, _orig=self._server_link.focusInEvent):
-            _orig(ev)
-            _sl_expand()
-        def _sl_focus_out(ev, _orig=self._server_link.focusOutEvent):
-            _orig(ev)
-            _sl_collapse()
+        _SL_COLLAPSED = 96
+        _SL_PADDING   = 18
+        def _sl_update_width(text):
+            if text.strip():
+                fm = self._server_link.fontMetrics()
+                needed = fm.horizontalAdvance(text) + _SL_PADDING
+                w = max(needed, _SL_COLLAPSED)
+            else:
+                w = _SL_COLLAPSED
+            self._server_link.setMinimumWidth(w)
+            self._server_link.setMaximumWidth(w)
+        _sl_update_width(self._server_link.text())
         def _sl_return_pressed():
             _reg_save({"server_link": self._server_link.text()})
             self._server_link.clearFocus()
-        self._server_link.focusInEvent   = _sl_focus_in
-        self._server_link.focusOutEvent  = _sl_focus_out
         self._server_link.returnPressed.connect(_sl_return_pressed)
+        self._server_link.textChanged.connect(lambda v: (_sl_update_width(v), _reg_save({"server_link": v})))
         r2b.addSpacing(10); r2b.addWidget(self._server_link)
         cl.addWidget(w2b)
         add_sep()
 
-        w4, r4 = make_row("Version")
-        v = QLabel("1.2.2"); v.setObjectName("settingVal"); v.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        r4.addStretch(); r4.addWidget(v)
-        cl.addWidget(w4)
+        w_ri, r_ri = make_row("Hourly Rejoin interval")
+        self._rejoin_hours = QLineEdit(_cfg.get("rejoin_hours", "0"))
+        self._rejoin_hours.setObjectName("keyInput")
+        self._rejoin_hours.setFixedSize(52, 24)
+        self._rejoin_hours.setAlignment(Qt.AlignCenter)
+        self._rejoin_hours.setPlaceholderText("0")
+        self._rejoin_hours.textChanged.connect(lambda v: _reg_save({"rejoin_hours": v}))
+        hint_ri = QLabel("0 = off"); hint_ri.setObjectName("dimText")
+        r_ri.addStretch(); r_ri.addWidget(hint_ri); r_ri.addSpacing(7); r_ri.addWidget(self._rejoin_hours)
+        cl.addWidget(w_ri)
 
         lo.addWidget(card)
-
         lo.addStretch()
+
+        btn_row = QHBoxLayout(); btn_row.setSpacing(8)
 
         discord_btn = QPushButton("Discord")
         discord_btn.setObjectName("btnDiscord")
@@ -3264,7 +3519,17 @@ class SettingsTab(QWidget):
         discord_btn.setFixedHeight(44)
         discord_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         discord_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://discord.com/invite/2fraBuhe3m")))
-        lo.addWidget(discord_btn)
+
+        guide_btn = QPushButton("Guide")
+        guide_btn.setObjectName("btnGuide")
+        guide_btn.setCursor(Qt.PointingHandCursor)
+        guide_btn.setFixedHeight(44)
+        guide_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        guide_btn.clicked.connect(self._show_guide)
+
+        btn_row.addWidget(discord_btn)
+        btn_row.addWidget(guide_btn)
+        lo.addLayout(btn_row)
 
         self._start_key.key_changed.connect(self.start_key_changed)
         self._reload_key.key_changed.connect(self.reload_key_changed)
@@ -3272,15 +3537,663 @@ class SettingsTab(QWidget):
         self._reload_key.key_changed.connect(lambda v: _reg_save({"reload_key": v}))
         self._nav.key_changed.connect(lambda v: _reg_save({"nav_key": v}))
 
+    def _build_guide_page(self):
+        lo = QVBoxLayout(self._guide_page)
+        lo.setContentsMargins(0, 0, 0, 0)
+        lo.setSpacing(0)
+
+        self._guide_stack = QStackedWidget()
+        lo.addWidget(self._guide_stack)
+
+        self._selection_page = QWidget()
+        self._reading_page   = QWidget()
+        self._guide_stack.addWidget(self._selection_page)
+        self._guide_stack.addWidget(self._reading_page)
+
+        self._build_selection_page()
+        self._build_reading_page()
+
+    def _build_selection_page(self):
+        lo = QVBoxLayout(self._selection_page)
+        lo.setContentsMargins(12, 9, 12, 13)
+        lo.setSpacing(8)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
+        back = _BackArrowIcon()
+        back.clicked.connect(self._show_main)
+        header_row.addWidget(back, 0, Qt.AlignVCenter)
+        subtitle = QLabel("Select a guide to read")
+        subtitle_font = QFont()
+        subtitle_font.setPointSize(11)
+        subtitle_font.setWeight(QFont.Bold)
+        subtitle.setFont(subtitle_font)
+        def _update_subtitle_style():
+            subtitle.setStyleSheet(f"color: {theme.t['dim']}; font-size: 15px; font-weight: 700;")
+        _update_subtitle_style()
+        theme.changed.connect(_update_subtitle_style)
+        header_row.addWidget(subtitle, 0, Qt.AlignVCenter)
+        header_row.addStretch()
+        lo.addLayout(header_row)
+        lo.addSpacing(2)
+
+        for section_title, _ in _GUIDE_TEXT:
+            btn = QPushButton(section_title.title())
+            btn.setObjectName("btnGuideSection")
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFixedHeight(44)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            btn.clicked.connect(lambda checked=False, t=section_title: self._open_section(t))
+            lo.addWidget(btn)
+
+        lo.addStretch()
+
+    def _build_reading_page(self):
+        lo = QVBoxLayout(self._reading_page)
+        lo.setContentsMargins(12, 9, 12, 13)
+        lo.setSpacing(0)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 2)
+        header_row.setSpacing(6)
+        back = _BackArrowIcon()
+        back.clicked.connect(lambda: self._guide_stack.setCurrentIndex(0))
+        header_row.addWidget(back, 0, Qt.AlignVCenter)
+        self._reading_title = QLabel("")
+        self._reading_title.setObjectName("sectionTitle")
+        reading_font = QFont()
+        reading_font.setPointSize(9)
+        reading_font.setWeight(QFont.Bold)
+        self._reading_title.setFont(reading_font)
+        header_row.addWidget(self._reading_title, 1)
+        lo.addLayout(header_row)
+        lo.addSpacing(6)
+
+        self._reading_scroll = _SmoothScrollArea()
+        self._reading_scroll.setWidgetResizable(True)
+        self._reading_scroll.setFrameShape(QFrame.NoFrame)
+        self._reading_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._reading_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        def _apply_reading_scroll_style():
+            accent = theme.t["accent"]
+            self._reading_scroll.setStyleSheet(
+                "QScrollArea { background: transparent; border: none; }"
+                "QScrollArea > QWidget > QWidget { background: transparent; }"
+                f"QScrollBar:vertical {{"
+                f"  width: 5px; background: transparent; margin: 2px 0 2px 0; border-radius: 2px;"
+                f"}}"
+                f"QScrollBar::handle:vertical {{"
+                f"  background: {accent}; opacity: 0.4; border-radius: 2px; min-height: 16px;"
+                f"}}"
+                f"QScrollBar::handle:vertical:hover {{"
+                f"  background: {accent};"
+                f"}}"
+                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+                "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
+            )
+
+        _apply_reading_scroll_style()
+        theme.changed.connect(_apply_reading_scroll_style)
+
+        self._reading_content = QWidget()
+        self._reading_content.setStyleSheet("background: transparent;")
+        self._reading_content_lo = QVBoxLayout(self._reading_content)
+        self._reading_content_lo.setContentsMargins(0, 0, 6, 0)
+        self._reading_content_lo.setSpacing(10)
+        self._reading_scroll.setWidget(self._reading_content)
+        lo.addWidget(self._reading_scroll, 1)
+
+    def _open_section(self, section_title):
+        for w_title, steps in _GUIDE_TEXT:
+            if w_title == section_title:
+                self._reading_title.setText(w_title.title())
+                lo = self._reading_content_lo
+                while lo.count():
+                    item = lo.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+
+                for i, step in enumerate(steps, 1):
+                    row_w = QWidget()
+                    row_w.setStyleSheet("background: transparent;")
+                    row_h = QHBoxLayout(row_w)
+                    row_h.setContentsMargins(0, 0, 0, 0)
+                    row_h.setSpacing(9)
+
+                    num_lbl = QLabel(f"{i}.")
+                    num_lbl.setObjectName("dimText")
+                    num_font = QFont()
+                    num_font.setPointSize(10)
+                    num_lbl.setFont(num_font)
+                    num_lbl.setFixedWidth(22)
+                    num_lbl.setAlignment(Qt.AlignRight | Qt.AlignTop)
+                    row_h.addWidget(num_lbl)
+
+                    step_lbl = QLabel(step)
+                    step_lbl.setWordWrap(True)
+                    step_lbl.setObjectName("settingVal")
+                    step_font = QFont()
+                    step_font.setPointSize(10)
+                    step_lbl.setFont(step_font)
+                    step_lbl.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+                    row_h.addWidget(step_lbl, 1)
+
+                    lo.addWidget(row_w)
+
+                lo.addStretch()
+                self._reading_scroll.verticalScrollBar().setValue(0)
+                self._guide_stack.setCurrentIndex(1)
+                break
+
+    def _show_guide(self):
+        self._guide_stack.setCurrentIndex(0)
+        self._stack.setCurrentIndex(1)
+
+    def _show_main(self):
+        self._stack.setCurrentIndex(0)
+
+    def _PLACEHOLDER_build_guide_page_old(self):
+        pass
+
     def nav_key(self): return self._nav.value()
     def start_key(self): return self._start_key.value()
     def reload_key(self): return self._reload_key.value()
     def server_link(self): return self._server_link.text()
+    def auto_rejoin_hours(self): return self._rejoin_hours.text().strip() or "0"
+
+
+class WebhookTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        _cfg = _reg_load()
+        self._message_id = None
+        self._ping_seed_rows = []
+        self._ping_tool_rows = []
+
+        seed_icons = {
+            "Carrot":     _pixmap_from_b64(_CARROT_B64),
+            "Corn":       _pixmap_from_b64(_CORN_B64),
+            "Onion":      _pixmap_from_b64(_ONION_B64),
+            "Strawberry": _pixmap_from_b64(_STRAWBERRY_B64),
+            "Mushroom":   _pixmap_from_b64(_MUSHROOM_B64),
+            "Beetroot":   _pixmap_from_b64(_BEETROOT_B64),
+            "Tomato":     _pixmap_from_b64(_TOMATO_B64),
+            "Apple":      _pixmap_from_b64(_APPLE_B64),
+            "Rose":       _pixmap_from_b64(_ROSE_B64),
+            "Wheat":      _pixmap_from_b64(_WHEAT_B64),
+            "Banana":     _pixmap_from_b64(_BANANA_B64),
+            "Plum":       _pixmap_from_b64(_PLUM_B64),
+            "Potato":     _pixmap_from_b64(_POTATO_B64),
+            "Cabbage":    _pixmap_from_b64(_CABBAGE_B64),
+            "Cherry":     _pixmap_from_b64(_CHERRY_B64),
+            "Bamboo":     _pixmap_from_b64(_BAMBOO_B64),
+            "Mango":      _pixmap_from_b64(_MANGO_B64),
+        }
+        tool_icons = {
+            "Watering Can":    _pixmap_from_b64(_WATERING_CAN_B64),
+            "Basic Sprinkler": _pixmap_from_b64(_BASIC_SPRINKLER_B64),
+            "Harvest Bell":    _pixmap_from_b64(_HARVEST_BELL_B64),
+            "Turbo Sprinkler": _pixmap_from_b64(_TURBO_SPRINKLER_B64),
+            "Favorite Tool":   _pixmap_from_b64(_FAVORITE_TOOL_B64),
+            "Super Sprinkler": _pixmap_from_b64(_SUPER_SPRINKLER_B64),
+            "Trowel":          _pixmap_from_b64(_TROWEL_B64),
+        }
+
+        saved_ping_seeds = set(_cfg.get("webhook_ping_seeds", "").split(",")) if _cfg.get("webhook_ping_seeds") else set()
+        saved_ping_tools = set(_cfg.get("webhook_ping_tools", "").split(",")) if _cfg.get("webhook_ping_tools") else set()
+
+        root_lo = QHBoxLayout(self)
+        root_lo.setContentsMargins(12, 9, 12, 13)
+        root_lo.setSpacing(6)
+
+        left = QWidget()
+        left.setStyleSheet("background: transparent;")
+        left_lo = QHBoxLayout(left)
+        left_lo.setContentsMargins(0, 0, 0, 0)
+        left_lo.setSpacing(6)
+        left_lo.addWidget(
+            self._make_ping_column("SEEDS", seed_icons, saved_ping_seeds, self._ping_seed_rows),
+            stretch=1
+        )
+        left_lo.addWidget(
+            self._make_ping_column("TOOLS", tool_icons, saved_ping_tools, self._ping_tool_rows),
+            stretch=1
+        )
+
+        for r in self._ping_seed_rows + self._ping_tool_rows:
+            r.toggled.connect(lambda _: self._save())
+
+        right = QWidget()
+        right.setStyleSheet("background: transparent;")
+        right_lo = QVBoxLayout(right)
+        right_lo.setContentsMargins(0, 0, 0, 0)
+        right_lo.setSpacing(6)
+
+        ROW_H = 34
+        def _make_card():
+            f = QFrame()
+            f.setObjectName("card")
+            f.setStyleSheet(
+                f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+                f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+            )
+            theme.changed.connect(lambda: f.setStyleSheet(
+                f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+                f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+            ))
+            return f
+
+        def _add_sep(layout):
+            s = QFrame()
+            s.setObjectName("innerSep")
+            s.setFrameShape(QFrame.HLine)
+            s.setFixedHeight(1)
+            layout.addWidget(s)
+
+        def _make_row(text):
+            w = QWidget()
+            w.setFixedHeight(ROW_H)
+            r = QHBoxLayout(w)
+            r.setContentsMargins(0, 0, 0, 0)
+            r.setSpacing(0)
+            l = QLabel(text)
+            l.setObjectName("dimText")
+            r.addWidget(l)
+            return w, r
+
+        toggle_card = _make_card()
+        tcl = QVBoxLayout(toggle_card)
+        tcl.setContentsMargins(12, 4, 12, 4)
+        tcl.setSpacing(0)
+
+        enable_w, enable_r = _make_row("Enable Webhook")
+        self._enable_sw = ToggleSwitch()
+        self._enable_sw.set_on(_cfg.get("webhook_enabled", "0") == "1")
+        enable_r.addStretch()
+        enable_r.addWidget(self._enable_sw)
+        tcl.addWidget(enable_w)
+        _add_sep(tcl)
+
+        ping_w, ping_r = _make_row("Enable Pinging")
+        self._ping_sw = ToggleSwitch()
+        self._ping_sw.set_on(_cfg.get("webhook_pinging", "0") == "1")
+        ping_r.addStretch()
+        ping_r.addWidget(self._ping_sw)
+        tcl.addWidget(ping_w)
+
+        right_lo.addWidget(toggle_card)
+
+        inputs_card = _make_card()
+        icl = QVBoxLayout(inputs_card)
+        icl.setContentsMargins(12, 4, 12, 4)
+        icl.setSpacing(0)
+
+        def _make_expanding_input(label_text, cfg_key, placeholder):
+            w = QWidget()
+            w.setFixedHeight(ROW_H)
+            r = QHBoxLayout(w)
+            r.setContentsMargins(0, 0, 0, 0)
+            r.setSpacing(0)
+            lbl = QLabel(label_text)
+            lbl.setObjectName("dimText")
+            lbl.setMaximumWidth(16777215)
+            r.addWidget(lbl)
+            edit = QLineEdit(_cfg.get(cfg_key, ""))
+            edit.setObjectName("keyInput")
+            edit.setPlaceholderText(placeholder)
+            edit.setFixedHeight(24)
+            edit.setMinimumWidth(140)
+            edit.setMaximumWidth(140)
+            r.addWidget(edit)
+            anim_in  = QPropertyAnimation(edit, b"maximumWidth")
+            anim_in.setDuration(180)
+            anim_in.setEasingCurve(QEasingCurve.OutCubic)
+            anim_out = QPropertyAnimation(lbl, b"maximumWidth")
+            anim_out.setDuration(180)
+            anim_out.setEasingCurve(QEasingCurve.OutCubic)
+            def expand():
+                anim_out.stop(); anim_in.stop()
+                anim_out.setStartValue(lbl.width())
+                anim_out.setEndValue(0)
+                anim_out.start()
+                anim_in.setStartValue(edit.width())
+                anim_in.setEndValue(16777215)
+                anim_in.start()
+            def collapse():
+                anim_out.stop(); anim_in.stop()
+                anim_in.setStartValue(edit.width())
+                anim_in.setEndValue(140)
+                anim_in.start()
+                anim_out.setStartValue(lbl.width())
+                anim_out.setEndValue(16777215)
+                anim_out.start()
+            def focus_in(ev, _orig=edit.focusInEvent):
+                _orig(ev); expand()
+            def focus_out(ev, _orig=edit.focusOutEvent):
+                _orig(ev); collapse()
+            edit.focusInEvent  = focus_in
+            edit.focusOutEvent = focus_out
+            edit.returnPressed.connect(lambda: (self._save(), edit.clearFocus()))
+            return w, edit
+
+        url_w, self._url_edit = _make_expanding_input("Webhook URL", "webhook_url", "https://discord.com/api/webhooks/...")
+        icl.addWidget(url_w)
+        _add_sep(icl)
+
+        uid_w, self._uid_edit = _make_expanding_input("User ID", "webhook_user_id", "123456789012345678")
+        icl.addWidget(uid_w)
+
+        right_lo.addWidget(inputs_card)
+
+        test_btn = QPushButton("Test Webhook")
+        test_btn.setObjectName("btnTest")
+        test_btn.setCursor(Qt.PointingHandCursor)
+        test_btn.setFixedHeight(44)
+        test_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        test_btn.clicked.connect(self._on_test)
+
+        def _apply_test_btn_style():
+            t = theme.t
+            d = t["is_dark"]
+            test_btn.setStyleSheet(
+                f"QPushButton {{ background: {'rgba(255,160,50,0.13)' if d else 'rgba(180,90,0,0.08)'}; "
+                f"border: 1px solid {'rgba(255,160,50,0.45)' if d else 'rgba(180,90,0,0.35)'}; "
+                f"color: {'#ffb040' if d else '#b45a00'}; font-size: 12px; font-weight: 700; "
+                f"padding: 5px 14px; border-radius: 7px; }}"
+                f"QPushButton:hover {{ background: {'rgba(255,160,50,0.22)' if d else 'rgba(180,90,0,0.15)'}; }}"
+                f"QPushButton:pressed {{ background: {'rgba(255,160,50,0.32)' if d else 'rgba(180,90,0,0.24)'}; }}"
+            )
+        _apply_test_btn_style()
+        theme.changed.connect(_apply_test_btn_style)
+
+        right_lo.addWidget(test_btn)
+
+        self._url_edit.textChanged.connect(lambda _: self._save())
+        self._uid_edit.textChanged.connect(lambda _: self._save())
+        self._enable_sw.toggled.connect(lambda _: self._save())
+        self._ping_sw.toggled.connect(lambda _: self._save())
+
+        root_lo.addWidget(left, stretch=3)
+        root_lo.addWidget(right, stretch=2)
+
+    def _make_ping_column(self, title, icons, saved_set, row_list):
+        col = QFrame()
+        col.setObjectName("card")
+        col.setStyleSheet(
+            f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+            f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+        )
+        theme.changed.connect(lambda: col.setStyleSheet(
+            f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+            f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+        ))
+        vlo = QVBoxLayout(col)
+        vlo.setContentsMargins(6, 6, 6, 6)
+        vlo.setSpacing(0)
+
+        hdr = QLabel(title)
+        hdr.setStyleSheet(
+            "font-size: 9px; letter-spacing: 0.1em; font-weight: 600;"
+            "color: palette(mid); padding-bottom: 4px;"
+        )
+        vlo.addWidget(hdr)
+
+        scroll = _SmoothScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        def _apply_scroll_style():
+            t = theme.t
+            accent = t["accent"]
+            scroll.setStyleSheet(
+                "QScrollArea { background: transparent; border: none; }"
+                "QWidget#scrollContent { background: transparent; }"
+                f"QScrollBar:vertical {{ width: 5px; background: transparent; margin: 2px 0 2px 0; border-radius: 2px; }}"
+                f"QScrollBar::handle:vertical {{ background: {accent}; opacity: 0.4; border-radius: 2px; min-height: 16px; }}"
+                f"QScrollBar::handle:vertical:hover {{ background: {accent}; }}"
+                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+                "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
+            )
+
+        _apply_scroll_style()
+        theme.changed.connect(_apply_scroll_style)
+
+        content = QWidget()
+        content.setObjectName("scrollContent")
+        content_lo = QVBoxLayout(content)
+        content_lo.setContentsMargins(0, 0, 6, 0)
+        content_lo.setSpacing(3)
+
+        for name, pm in icons.items():
+            btn = _AutoBuyRow(name, pm)
+            if name in saved_set:
+                btn._active = True
+                btn.update()
+            row_list.append(btn)
+            content_lo.addWidget(btn)
+
+        content_lo.addStretch()
+        scroll.setWidget(content)
+        vlo.addWidget(scroll)
+        return col
+
+    def _save(self):
+        _reg_save({
+            "webhook_url":        self._url_edit.text().strip(),
+            "webhook_user_id":    self._uid_edit.text().strip(),
+            "webhook_enabled":    "1" if self._enable_sw.is_on() else "0",
+            "webhook_pinging":    "1" if self._ping_sw.is_on() else "0",
+            "webhook_ping_seeds": ",".join(r.name() for r in self._ping_seed_rows if r.is_on()),
+            "webhook_ping_tools": ",".join(r.name() for r in self._ping_tool_rows if r.is_on()),
+        })
+
+    def _accent_color_int(self):
+        try:
+            return int(theme.t["accent"].lstrip("#"), 16)
+        except Exception:
+            return 0x89DFFF
+
+    _ALL_SEEDS = [
+        "Carrot", "Corn", "Onion", "Strawberry", "Mushroom", "Beetroot",
+        "Tomato", "Apple", "Rose", "Wheat", "Banana", "Plum",
+        "Potato", "Cabbage", "Cherry", "Bamboo", "Mango",
+    ]
+    _ALL_TOOLS = [
+        "Watering Can", "Basic Sprinkler", "Harvest Bell",
+        "Turbo Sprinkler", "Favorite Tool", "Super Sprinkler", "Trowel",
+    ]
+
+    def _build_payload(self, stats):
+        purchases = stats.get("purchases", {})
+
+        seed_set = set(self._ALL_SEEDS)
+        tool_set = set(self._ALL_TOOLS)
+
+        seed_purchases = {k: v for k, v in purchases.items() if k in seed_set}
+        tool_purchases = {k: v for k, v in purchases.items() if k in tool_set}
+
+        all_purchases = {**seed_purchases, **tool_purchases}
+        shared_name_w = (max(len(n) for n in all_purchases) + 2) if all_purchases else 10
+        shared_qty_w  = (max(len(str(v)) for v in all_purchases.values()) + 1) if all_purchases else 3
+
+        def _two_col_block(items):
+            if not items:
+                return "none"
+            pairs = list(items.items())
+            lines = []
+            for i in range(0, len(pairs), 2):
+                left_name, left_qty = pairs[i]
+                left = f"{left_name:<{shared_name_w}}x{str(left_qty):<{shared_qty_w}}"
+                if i + 1 < len(pairs):
+                    right_name, right_qty = pairs[i + 1]
+                    right = f"{right_name:<{shared_name_w}}x{str(right_qty):<{shared_qty_w}}"
+                    lines.append(f"{left}  {right}")
+                else:
+                    lines.append(left)
+            return "```\n" + "\n".join(lines) + "\n```"
+
+        fields = [
+            {"name": "Status",       "value": stats.get("status",  "Unknown"),  "inline": True},
+            {"name": "Time Elapsed", "value": stats.get("elapsed", "00:00:00"), "inline": True},
+            {"name": "Cycles",       "value": str(stats.get("cycles", 0)),      "inline": True},
+        ]
+
+        if seed_purchases:
+            fields.append({"name": "— Seeds —", "value": _two_col_block(seed_purchases), "inline": False})
+
+        if tool_purchases:
+            fields.append({"name": "— Tools —", "value": _two_col_block(tool_purchases), "inline": False})
+
+        if not seed_purchases and not tool_purchases:
+            fields.append({"name": "Bought This Session", "value": "None yet", "inline": False})
+
+        embed = {
+            "title": "moris Garden Horizons macro",
+            "color": self._accent_color_int(),
+            "fields": fields,
+            "footer": {"text": "v1.3"},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        return {"content": "", "embeds": [embed]}
+
+    def _http(self, url, payload, method="POST"):
+        data = _json.dumps(payload).encode("utf-8") if payload else None
+        req = urllib.request.Request(url, data=data, method=method)
+        if data:
+            req.add_header("Content-Type", "application/json")
+        req.add_header("User-Agent", "DiscordBot (moris-macro, 1.0)")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read()
+            return body, resp.status
+
+    def _on_start(self, stats):
+        if not self._enable_sw.is_on():
+            return
+        url = self._url_edit.text().strip()
+        if not url:
+            return
+        self._message_id = None
+
+        def _run():
+            try:
+                body, _ = self._http(url + "?wait=true", self._build_payload(stats))
+                msg = _json.loads(body)
+                self._message_id = msg.get("id")
+            except Exception:
+                pass
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_cycle(self, stats):
+        if not self._enable_sw.is_on():
+            return
+        url = self._url_edit.text().strip()
+        if not url or not self._message_id:
+            return
+
+        def _run():
+            try:
+                self._http(
+                    f"{url}/messages/{self._message_id}",
+                    self._build_payload(stats),
+                    method="PATCH"
+                )
+            except Exception:
+                pass
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_purchase(self, item_name, item_type, stats):
+        if not self._enable_sw.is_on():
+            return
+        if not self._ping_sw.is_on():
+            return
+        if item_type == "seed":
+            ping_set = {r.name() for r in self._ping_seed_rows if r.is_on()}
+        else:
+            ping_set = {r.name() for r in self._ping_tool_rows if r.is_on()}
+        if item_name not in ping_set:
+            return
+        url = self._url_edit.text().strip()
+        if not url:
+            return
+
+        uid = self._uid_edit.text().strip()
+
+        def _run():
+            try:
+                ping_content = f"<@{uid}>" if uid else "@here"
+                body, _ = self._http(url + "?wait=true", {"content": ping_content})
+                ping_msg = _json.loads(body)
+                ping_id = ping_msg.get("id")
+                if ping_id:
+                    try:
+                        self._http(f"{url}/messages/{ping_id}", {}, method="DELETE")
+                    except Exception:
+                        pass
+                payload = self._build_payload(stats)
+                if self._message_id:
+                    self._http(
+                        f"{url}/messages/{self._message_id}",
+                        payload,
+                        method="PATCH"
+                    )
+                else:
+                    body, _ = self._http(url + "?wait=true", payload)
+                    msg = _json.loads(body)
+                    self._message_id = msg.get("id")
+            except Exception:
+                pass
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_test(self):
+        url = self._url_edit.text().strip()
+        if not url:
+            return
+
+        def _run():
+            try:
+                payload = {
+                    "embeds": [{
+                        "title": "Webhook Test",
+                        "description": "Test message from moris Garden Horizons macro",
+                        "color": self._accent_color_int(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "footer": {"text": "v1.3"},
+                    }]
+                }
+                body, _ = self._http(url + "?wait=true", payload)
+                msg = _json.loads(body)
+                self._message_id = msg.get("id")
+
+                if self._ping_sw.is_on():
+                    uid = self._uid_edit.text().strip()
+                    ping_payload = {"content": f"<@{uid}>" if uid else "@here"}
+                    body, _ = self._http(url + "?wait=true", ping_payload)
+                    ping_msg = _json.loads(body)
+                    ping_id = ping_msg.get("id")
+                    if ping_id:
+                        try:
+                            self._http(f"{url}/messages/{ping_id}", {}, method="DELETE")
+                        except Exception:
+                            pass
+            except Exception as e:
+                print(f"[webhook test error] {e}")
+
+        threading.Thread(target=_run, daemon=True).start()
 
 
 def resize_roblox_window():
     if not _WIN32_OK:
         return None
+    import ctypes
     titles = ["Roblox", "RobloxPlayerBeta.exe", "RobloxPlayer.exe"]
     hwnd = None
     for title in titles:
@@ -3306,7 +4219,19 @@ def resize_roblox_window():
     if not hwnd:
         return None
     try:
-        win32gui.SetForegroundWindow(hwnd)
+        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+        try:
+            _cur = win32api.GetCurrentThreadId()
+            _fg_hwnd = win32gui.GetForegroundWindow()
+            _fg_tid, _ = win32process.GetWindowThreadProcessId(_fg_hwnd)
+            if _fg_tid != _cur:
+                ctypes.windll.user32.AttachThreadInput(_cur, _fg_tid, True)
+                win32gui.SetForegroundWindow(hwnd)
+                ctypes.windll.user32.AttachThreadInput(_cur, _fg_tid, False)
+            else:
+                win32gui.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
         time.sleep(0.1)
         style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
         WS_CAPTION = 0x00C00000
@@ -3330,7 +4255,7 @@ class MainWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setWindowTitle("moris Garden Horizons macro")
 
@@ -3363,11 +4288,13 @@ class MainWindow(QWidget):
         self._dash = DashboardTab()
         self._autobuy = AutoBuyTab()
         self._harvest = AutoHarvestTab()
+        self._webhook = WebhookTab()
         self._settings = SettingsTab()
 
         self._tabs.addTab(self._dash,     " Dashboard")
         self._tabs.addTab(self._autobuy,  " Auto Buy")
         self._tabs.addTab(self._harvest,  " Auto Harvest")
+        self._tabs.addTab(self._webhook,  " Webhook")
         self._tabs.addTab(self._settings, " Settings ")
 
         cl.addWidget(self._tabs)
@@ -3378,6 +4305,8 @@ class MainWindow(QWidget):
         self._dash._seeds_tab = self._autobuy
         self._dash._tools_tab = self._autobuy
         self._dash._harvest_tab = self._harvest
+        self._dash._webhook_tab = self._webhook
+        self._dash._settings_tab = self._settings
         self._autobuy.seeds_status_changed.connect(self._dash.set_seeds_status)
         self._autobuy.tools_status_changed.connect(self._dash.set_tools_status)
 
@@ -3404,6 +4333,7 @@ class MainWindow(QWidget):
     def _reload_and_reset(self):
         self._dash.reload()
         self.move(*self._initial_pos)
+        threading.Thread(target=resize_roblox_window, daemon=True).start()
 
     def showEvent(self, e):
         super().showEvent(e)
@@ -3442,7 +4372,7 @@ class MainWindow(QWidget):
         if key_str == self._settings.start_key():
             _link = _reg_load().get("server_link", "").strip()
             if not _link:
-                self._tabs.setCurrentIndex(3)
+                self._tabs.setCurrentIndex(4)
                 QTimer.singleShot(0, self._settings._server_link.setFocus)
                 return
         fn = self._hotkey_map.get(key_str)
@@ -3501,14 +4431,14 @@ class MainWindow(QWidget):
 
     def _refresh_tab_icons(self, active_idx):
         t = theme.t
-        names = ["dashboard", "autobuy", "harvest", "settings"]
+        names = ["dashboard", "autobuy", "harvest", "webhook", "settings"]
         for i, name in enumerate(names):
             col = t["tab_active"] if i == active_idx else t["icon_dim"]
-            icon_name = "seeds" if name == "autobuy" else name
+            icon_name = "seeds" if name == "autobuy" else ("settings" if name == "settings" else name)
             self._tabs.setTabIcon(i, icon_tab(icon_name, col, 13))
 
     def _on_tab_changed(self, idx): self._refresh_tab_icons(idx)
-
+ 
     def _on_theme(self):
         t = theme.t
         QApplication.instance().setStyleSheet(build_stylesheet(t))
