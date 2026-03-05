@@ -3450,7 +3450,7 @@ class SettingsTab(QWidget):
 
         _cfg = _reg_load()
 
-        w1, r1 = make_row("Start / Stop")
+        w1, r1 = make_row("Start")
         self._start_key = KeyCaptureEdit(_cfg.get("start_key", "F1"))
         hint1 = QLabel("click to set"); hint1.setObjectName("dimText")
         r1.addStretch(); r1.addWidget(hint1); r1.addSpacing(7); r1.addWidget(self._start_key)
