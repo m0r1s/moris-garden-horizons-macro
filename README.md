@@ -16,14 +16,14 @@ A Python-based Garden Horizons macro.
 
 - **Automatic Seed Purchasing**: Automatically purchases in GUI selected Seeds.
 - **Automatic Tool Purchasing**: Automatically purchases in GUI selected Tools.
+- **Webhook Support**: Sends Customizable Updates to your Discord Webhook.
 - **Automatic Harvesting**: Automatically Harvests along your custom Path.
 - **Custom Harvest Pathing**: Set your own Harvesting Route for Auto Harvest.
-- **Stock Detection**: If Seeds are out of Stock the macro skips them.
 - **Action Logging**: Logs the current macro Action and Current Path for Auto Harvest.
 - **Shop Timer**: The in-game shop Timer displayed in the GUI.
 - **Changeable Keybinds**: Changeable macro Hotkeys.
-- **Custom UI Navigation Key**: All UI Navigation Hotkey Support.
 - **Universal Resolution Support**: The macro supports all resolutions.
+- **In GUI Guide**:
  
 ---
 
