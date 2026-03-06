@@ -23,7 +23,7 @@ A Python-based Garden Horizons macro.
 - **Shop Timer**: The in-game shop Timer displayed in the GUI.
 - **Changeable Keybinds**: Changeable macro Hotkeys.
 - **Universal Resolution Support**: The macro supports all resolutions.
-- **In GUI Guide**:
+- **In GUI Guide**: Small text snippets to Guide you through certain macro features.
  
 ---
 
