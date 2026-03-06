@@ -853,7 +853,7 @@ class TitleBar(QWidget):
         self._logo.setFixedSize(16, 16)
         lo.addWidget(self._logo)
 
-        lbl = QLabel("moris Garden Horizons macro v1.3")
+        lbl = QLabel("moris Garden Horizons macro v1.3.1")
         lbl.setObjectName("titleText")
         lo.addWidget(lbl)
         lo.addStretch()
@@ -1136,7 +1136,6 @@ class DashboardTab(QWidget):
             import random, ctypes, ctypes.wintypes
 
             self._running = True
-            self._auto_rejoin_elapsed = 0
             self._auto_rejoin_requested = False
             self._status_lbl.setText("Running")
             self._status_lbl.setObjectName("statusRunning")
@@ -2377,8 +2376,10 @@ class DashboardTab(QWidget):
                 self._sequence_running = False
                 pending_rejoin = self._auto_rejoin_requested
 
-            if pending_rejoin and not self._sequence_stop.is_set():
+            if pending_rejoin:
                 self._auto_rejoin_requested = False
+                self._running = False
+                self._sequence_stop = threading.Event()
                 self._trigger_rejoin.emit()
 
         threading.Thread(target=_sequence_wrapper, daemon=True).start()
@@ -4056,7 +4057,7 @@ class WebhookTab(QWidget):
             "title": "moris Garden Horizons macro",
             "color": self._accent_color_int(),
             "fields": fields,
-            "footer": {"text": "v1.3"},
+            "footer": {"text": "v1.3.1"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -4166,7 +4167,7 @@ class WebhookTab(QWidget):
                         "description": "Test message from moris Garden Horizons macro",
                         "color": self._accent_color_int(),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "footer": {"text": "v1.3"},
+                        "footer": {"text": "v1.3.1"},
                     }]
                 }
                 body, _ = self._http(url + "?wait=true", payload)
