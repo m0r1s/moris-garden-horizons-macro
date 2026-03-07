@@ -863,7 +863,7 @@ class TitleBar(QWidget):
         self._logo.setFixedSize(16, 16)
         lo.addWidget(self._logo)
 
-        lbl = QLabel("moris Garden Horizons macro v1.3.2")
+        lbl = QLabel("moris Garden Horizons macro v1.3.3")
         lbl.setObjectName("titleText")
         lo.addWidget(lbl)
         lo.addStretch()
@@ -1158,7 +1158,24 @@ class DashboardTab(QWidget):
                 _link = _cfg.get("server_link", "").strip()
                 if _link:
                     try:
-                        import webbrowser as _wb
+                        _PLACE_ID = "130594398886540"
+
+                        def _to_deep_link(_raw):
+                            import re as _re
+                            _raw = _raw.strip()
+                            if _raw.startswith("roblox://"):
+                                return _raw
+                            _m = _re.search(r"privateServerLinkCode=([A-Za-z0-9_-]+)", _raw)
+                            if _m:
+                                return f"roblox://experiences/start?placeId={_PLACE_ID}&linkCode={_m.group(1)}"
+                            _m = _re.search(r"roblox\.com/share\?code=([A-Za-z0-9_-]+)(?:&type=([A-Za-z]+))?", _raw)
+                            if _m:
+                                _code = _m.group(1)
+                                _type = _m.group(2) or "Server"
+                                return f"roblox://navigation/share_links?code={_code}&type={_type}"
+                            if _re.match(r"^[A-Za-z0-9_-]+$", _raw):
+                                return f"roblox://experiences/start?placeId={_PLACE_ID}&linkCode={_raw}"
+                            return _raw
 
                         _TARGET_COLOR = (0x99, 0xEB, 0xD0)
                         _TARGET_X, _TARGET_Y = 485, 548
@@ -1219,73 +1236,13 @@ class DashboardTab(QWidget):
                             except Exception:
                                 pass
 
-                        def _find_roblox_hwnd():
-                            titles = ["Roblox", "RobloxPlayerBeta.exe", "RobloxPlayer.exe"]
-                            for _title in titles:
-                                if _title.endswith(".exe"):
-                                    _found = []
-                                    def _cb(_h, _extra):
-                                        _, _pid = win32process.GetWindowThreadProcessId(_h)
-                                        try:
-                                            _proc = win32api.OpenProcess(0x0410, False, _pid)
-                                            _name = win32process.GetModuleFileNameEx(_proc, 0)
-                                            if _title in _name and win32gui.IsWindowVisible(_h):
-                                                _extra.append(_h)
-                                        except Exception:
-                                            pass
-                                    win32gui.EnumWindows(_cb, _found)
-                                    if _found:
-                                        return _found[0]
-                                else:
-                                    _h = win32gui.FindWindow(None, _title)
-                                    if _h:
-                                        return _h
-                            return None
-
-                        def _hwnd_alive(_h):
-                            if not _h:
-                                return False
-                            try:
-                                return win32gui.IsWindow(_h) and win32gui.IsWindowVisible(_h)
-                            except Exception:
-                                return False
-
-                        while True:
-                            if _stop.is_set(): return
-                            _old_hwnd = _find_roblox_hwnd()
-
-                            self._set_action("Rejoining server...")
-                            _wb.open(_link)
-                            _deadline = time.time() + 7.0
-
-                            if _old_hwnd:
-                                self._set_action("Waiting for old Roblox to close...")
-                                while _hwnd_alive(_old_hwnd):
-                                    if _stop.is_set(): return
-                                    if time.time() > _deadline:
-                                        break
-                                    time.sleep(0.1)
-
-                            if _stop.is_set(): return
-                            if time.time() <= _deadline:
-                                self._set_action("Waiting for new Roblox window...")
-                                _new_hwnd = None
-                                while time.time() <= _deadline:
-                                    if _stop.is_set(): return
-                                    _candidate = _find_roblox_hwnd()
-                                    if _candidate and (_candidate != _old_hwnd or not _old_hwnd):
-                                        _new_hwnd = _candidate
-                                        break
-                                    time.sleep(0.1)
-                                if _new_hwnd:
-                                    break
-
-                            if _stop.is_set(): return
-                            self._set_action("Retrying rejoin...")
+                        self._set_action("Rejoining server...")
+                        _deep_link = _to_deep_link(_link)
+                        ctypes.windll.shell32.ShellExecuteW(None, "open", _deep_link, None, None, 1)
 
                         if _stop.is_set(): return
-                        self._set_action("Waiting for Roblox to stabilize...")
-                        _stop.wait(2)
+                        self._set_action("Waiting for Roblox to load...")
+                        _stop.wait(3)
                         if _stop.is_set(): return
                         resize_roblox_window()
                         _stop.wait(1)
@@ -1332,10 +1289,12 @@ class DashboardTab(QWidget):
                         if _stop.is_set(): return
                     except Exception:
                         if _stop.is_set(): return
-                        self._set_action("Rejoin failed, starting anyway...")
+                        self._set_action("Rejoin failed. Enter a valid private server link.")
+                        return
 
-                if not _stop.is_set():
                     self.run_seedshop_sequence()
+                else:
+                    self._set_action("No private server link set. Enter one in Settings.")
 
             threading.Thread(target=_rejoin_then_start, daemon=True).start()
 
@@ -2418,6 +2377,13 @@ class DashboardTab(QWidget):
                 self._set_action("Auto rejoin scheduled after current cycle...")
         except Exception:
             pass
+
+    def _queue_debug_rejoin(self):
+        if self._auto_rejoin_requested:
+            return
+        self._auto_rejoin_elapsed = 0
+        self._auto_rejoin_requested = True
+        self._set_action("Debug rejoin queued...")
 
 
 class OutlinedToggleRow(QWidget):
@@ -4072,7 +4038,7 @@ class WebhookTab(QWidget):
             "title": "moris Garden Horizons macro",
             "color": self._accent_color_int(),
             "fields": fields,
-            "footer": {"text": "v1.3.2"},
+            "footer": {"text": "v1.3.3"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -4182,7 +4148,7 @@ class WebhookTab(QWidget):
                         "description": "Test message from moris Garden Horizons macro",
                         "color": self._accent_color_int(),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "footer": {"text": "v1.3.2"},
+                        "footer": {"text": "v1.3.3"},
                     }]
                 }
                 body, _ = self._http(url + "?wait=true", payload)
@@ -4334,6 +4300,7 @@ class MainWindow(QWidget):
         self._hotkey_map = {
             self._settings.start_key(): self._dash._on_run_sequence,
             self._settings.reload_key(): self._reload_and_reset,
+            "f3": self._dash._queue_debug_rejoin,
         }
         self._dash.update_start_label(self._settings.start_key())
         self._dash.update_reload_label(self._settings.reload_key())
