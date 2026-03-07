@@ -610,6 +610,7 @@ class ToggleSwitch(QWidget):
         self._on = False
         self._anim_pos = 0.0
         self.setFixedSize(_SW_W, _SW_H)
+        self.setCursor(Qt.PointingHandCursor)
 
         self._timer = QTimer(self)
         self._timer.setInterval(12)
@@ -744,6 +745,7 @@ class KeyCaptureEdit(QLineEdit):
         self.setReadOnly(True)
         self.setFixedSize(52, 24)
         self.setAlignment(Qt.AlignCenter)
+        self.setCursor(Qt.PointingHandCursor)
         self._listening = False
 
     def mousePressEvent(self, e):
@@ -771,8 +773,10 @@ class KeyCaptureEdit(QLineEdit):
             if key_str:
                 self._value = key_str
                 self.setText(key_str)
+                self._listening = False
                 self.key_changed.emit(key_str)
-            self._listening = False
+            else:
+                self._listening = False
             e.accept()
         else:
             super().keyPressEvent(e)
@@ -783,6 +787,12 @@ class KeyCaptureEdit(QLineEdit):
         super().focusOutEvent(e)
 
     def value(self): return self._value
+
+    def revert(self, value):
+        self._value = value
+        self.setText("...")
+        self._listening = True
+        self.setFocus()
 
 
 class MinimizeBtn(QPushButton):
@@ -815,7 +825,7 @@ class MinimizeBtn(QPushButton):
 
         pen = QPen(color, 1.8, Qt.SolidLine, Qt.RoundCap)
         p.setPen(pen)
-        p.drawLine(QPointF(cx - 5, cy + 2), QPointF(cx + 5, cy + 2))
+        p.drawLine(QPointF(cx - 5, cy), QPointF(cx + 5, cy))
         p.end()
 
 
@@ -853,7 +863,7 @@ class TitleBar(QWidget):
         self._logo.setFixedSize(16, 16)
         lo.addWidget(self._logo)
 
-        lbl = QLabel("moris Garden Horizons macro v1.3.1")
+        lbl = QLabel("moris Garden Horizons macro v1.3.2")
         lbl.setObjectName("titleText")
         lo.addWidget(lbl)
         lo.addStretch()
@@ -3472,6 +3482,18 @@ class SettingsTab(QWidget):
         cl.addWidget(w3)
         add_sep()
 
+        w_ri, r_ri = make_row("Hourly Rejoin interval")
+        self._rejoin_hours = QLineEdit(_cfg.get("rejoin_hours", "0"))
+        self._rejoin_hours.setObjectName("keyInput")
+        self._rejoin_hours.setFixedSize(52, 24)
+        self._rejoin_hours.setAlignment(Qt.AlignCenter)
+        self._rejoin_hours.setPlaceholderText("0")
+        self._rejoin_hours.textChanged.connect(lambda v: _reg_save({"rejoin_hours": v}))
+        hint_ri = QLabel("0 = off"); hint_ri.setObjectName("dimText")
+        r_ri.addStretch(); r_ri.addWidget(hint_ri); r_ri.addSpacing(7); r_ri.addWidget(self._rejoin_hours)
+        cl.addWidget(w_ri)
+        add_sep()
+
         w2b, r2b = make_row("Private Server Link")
         self._server_link = QLineEdit(_cfg.get("server_link", ""))
         self._server_link.setObjectName("serverLinkEdit")
@@ -3488,6 +3510,7 @@ class SettingsTab(QWidget):
                 w = _SL_COLLAPSED
             self._server_link.setMinimumWidth(w)
             self._server_link.setMaximumWidth(w)
+        self._sl_update_width = _sl_update_width
         _sl_update_width(self._server_link.text())
         def _sl_return_pressed():
             _reg_save({"server_link": self._server_link.text()})
@@ -3496,18 +3519,6 @@ class SettingsTab(QWidget):
         self._server_link.textChanged.connect(lambda v: (_sl_update_width(v), _reg_save({"server_link": v})))
         r2b.addSpacing(10); r2b.addWidget(self._server_link)
         cl.addWidget(w2b)
-        add_sep()
-
-        w_ri, r_ri = make_row("Hourly Rejoin interval")
-        self._rejoin_hours = QLineEdit(_cfg.get("rejoin_hours", "0"))
-        self._rejoin_hours.setObjectName("keyInput")
-        self._rejoin_hours.setFixedSize(52, 24)
-        self._rejoin_hours.setAlignment(Qt.AlignCenter)
-        self._rejoin_hours.setPlaceholderText("0")
-        self._rejoin_hours.textChanged.connect(lambda v: _reg_save({"rejoin_hours": v}))
-        hint_ri = QLabel("0 = off"); hint_ri.setObjectName("dimText")
-        r_ri.addStretch(); r_ri.addWidget(hint_ri); r_ri.addSpacing(7); r_ri.addWidget(self._rejoin_hours)
-        cl.addWidget(w_ri)
 
         lo.addWidget(card)
         lo.addStretch()
@@ -3703,6 +3714,10 @@ class SettingsTab(QWidget):
     def reload_key(self): return self._reload_key.value()
     def server_link(self): return self._server_link.text()
     def auto_rejoin_hours(self): return self._rejoin_hours.text().strip() or "0"
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._sl_update_width(self._server_link.text())
 
 
 class WebhookTab(QWidget):
@@ -4057,7 +4072,7 @@ class WebhookTab(QWidget):
             "title": "moris Garden Horizons macro",
             "color": self._accent_color_int(),
             "fields": fields,
-            "footer": {"text": "v1.3.1"},
+            "footer": {"text": "v1.3.2"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -4167,7 +4182,7 @@ class WebhookTab(QWidget):
                         "description": "Test message from moris Garden Horizons macro",
                         "color": self._accent_color_int(),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "footer": {"text": "v1.3.1"},
+                        "footer": {"text": "v1.3.2"},
                     }]
                 }
                 body, _ = self._http(url + "?wait=true", payload)
@@ -4320,6 +4335,8 @@ class MainWindow(QWidget):
             self._settings.start_key(): self._dash._on_run_sequence,
             self._settings.reload_key(): self._reload_and_reset,
         }
+        self._dash.update_start_label(self._settings.start_key())
+        self._dash.update_reload_label(self._settings.reload_key())
         self._start_global_hotkeys()
 
         theme.changed.connect(self._on_theme)
@@ -4370,6 +4387,9 @@ class MainWindow(QWidget):
         return None
 
     def _dispatch_hotkey(self, key_str):
+        for widget in (self._settings._start_key, self._settings._reload_key, self._settings._nav):
+            if widget._listening:
+                return
         if key_str == self._settings.start_key():
             _link = _reg_load().get("server_link", "").strip()
             if not _link:
@@ -4412,16 +4432,26 @@ class MainWindow(QWidget):
         self._start_global_hotkeys()
 
     def _on_start_key(self, key):
-        old_key = self._settings.start_key()
-        if old_key in self._hotkey_map:
+        if key == self._settings.reload_key():
+            self._settings._start_key.revert(
+                next((k for k, v in self._hotkey_map.items() if v is self._dash._on_run_sequence), key)
+            )
+            return
+        old_keys = [k for k, v in self._hotkey_map.items() if v is self._dash._on_run_sequence]
+        for old_key in old_keys:
             del self._hotkey_map[old_key]
         self._hotkey_map[key] = self._dash._on_run_sequence
         self._start_global_hotkeys()
         self._dash.update_start_label(key)
 
     def _on_reload_key(self, key):
-        old_key = self._settings.reload_key()
-        if old_key in self._hotkey_map:
+        if key == self._settings.start_key():
+            self._settings._reload_key.revert(
+                next((k for k, v in self._hotkey_map.items() if v is self._reload_and_reset), key)
+            )
+            return
+        old_keys = [k for k, v in self._hotkey_map.items() if v is self._reload_and_reset]
+        for old_key in old_keys:
             del self._hotkey_map[old_key]
         self._hotkey_map[key] = self._reload_and_reset
         self._start_global_hotkeys()
