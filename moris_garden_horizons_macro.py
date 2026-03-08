@@ -14,7 +14,7 @@ import json as _json
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTabWidget, QFrame, QLineEdit,
-    QGridLayout, QSizePolicy, QScrollArea, QStackedWidget
+    QGridLayout, QSizePolicy, QScrollArea, QStackedWidget, QMessageBox
 )
 from PySide6.QtCore import (
     Qt, QTimer, Signal, QObject, QRectF, QPointF,
@@ -37,6 +37,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 if _WIN32_OK:
     import ctypes as _ctypes
+    import ctypes.wintypes
     _HOOKPROC = _ctypes.WINFUNCTYPE(_ctypes.c_long, _ctypes.c_int,
                                     _ctypes.wintypes.WPARAM, _ctypes.wintypes.LPARAM)
 else:
@@ -333,6 +334,21 @@ QPushButton#btnTheme {{
     border-radius: 5px; padding: 0px;
 }}
 QPushButton#btnTheme:hover {{ background: {hov}; }}
+QPushButton#btnBackArrow {{
+    background: transparent; border: none;
+    border-radius: 5px; padding: 0px;
+}}
+QPushButton#btnBackArrow:hover {{ background: {hov}; }}
+QPushButton#btnPin {{
+    background: transparent; border: none;
+    border-radius: 5px; padding: 0px;
+}}
+QPushButton#btnPin:hover {{ background: {hov}; }}
+QPushButton#btnPinOn {{
+    background: rgba(120,200,255,0.15); border: none;
+    border-radius: 5px; padding: 0px;
+}}
+QPushButton#btnPinOn:hover {{ background: rgba(120,200,255,0.26); }}
 QLineEdit#keyInput {{
     background: {t['input_bg']};
     border: 1px solid {bstr};
@@ -427,6 +443,16 @@ def _pm(size):
     pm = QPixmap(size, size)
     pm.fill(Qt.transparent)
     return pm
+
+_SVG_BACK   = b'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'''
+_SVG_PIN    = b'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>'''
+_SVG_PIN_ON = b'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#78c8ff" stroke="#78c8ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>'''
+
+def _svg_icon(svg_bytes, size=16, color="#52596b"):
+    colored = svg_bytes.replace(b'currentColor', color.encode())
+    pix = QPixmap()
+    pix.loadFromData(colored, "SVG")
+    return QIcon(pix.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
 def icon_sun(color, size=15):
     pm = _pm(size)
@@ -846,6 +872,55 @@ class ThemeBtn(QPushButton):
         self.setIconSize(QSize(15, 15))
 
 
+class PinBtn(QPushButton):
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
+        self.setObjectName("btnPin")
+        self.setFixedSize(22, 22)
+        self.setCursor(Qt.PointingHandCursor)
+        self._window = window
+        self._pinned = True
+        self.clicked.connect(self._toggle)
+        self._refresh()
+
+    def _toggle(self):
+        self._pinned = not self._pinned
+        self._on_pin(self._pinned)
+        self._refresh()
+
+    def _on_pin(self, on):
+        hwnd = ctypes.wintypes.HWND(int(self._window.winId()))
+        user32 = ctypes.windll.user32
+        user32.SetWindowPos.restype  = ctypes.wintypes.BOOL
+        user32.SetWindowPos.argtypes = [
+            ctypes.wintypes.HWND, ctypes.wintypes.HWND,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.wintypes.UINT,
+        ]
+        HWND_TOPMOST   = ctypes.wintypes.HWND(-1)
+        HWND_NOTOPMOST = ctypes.wintypes.HWND(-2)
+        SWP_NOSIZE     = 0x0001
+        SWP_NOMOVE     = 0x0002
+        SWP_NOACTIVATE = 0x0010
+        user32.SetWindowPos(
+            hwnd,
+            HWND_TOPMOST if on else HWND_NOTOPMOST,
+            0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+        )
+
+    def _refresh(self):
+        if self._pinned:
+            self.setObjectName("btnPinOn")
+            self.setIcon(_svg_icon(_SVG_PIN_ON, 14, "#78c8ff"))
+        else:
+            self.setObjectName("btnPin")
+            self.setIcon(_svg_icon(_SVG_PIN, 14, theme.t["dim"]))
+        self.setIconSize(QSize(14, 14))
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+
 class TitleBar(QWidget):
     def __init__(self, window, parent=None):
         super().__init__(parent)
@@ -863,11 +938,12 @@ class TitleBar(QWidget):
         self._logo.setFixedSize(16, 16)
         lo.addWidget(self._logo)
 
-        lbl = QLabel("moris Garden Horizons macro v1.3.3")
+        lbl = QLabel("moris Garden Horizons macro v1.4")
         lbl.setObjectName("titleText")
         lo.addWidget(lbl)
         lo.addStretch()
 
+        lo.addWidget(PinBtn(window))
         lo.addWidget(ThemeBtn())
 
         btn_min = MinimizeBtn()
@@ -955,6 +1031,7 @@ def _next_5min_seconds():
 
 class DashboardTab(QWidget):
     _trigger_rejoin = Signal()
+    _append_log_signal = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -974,6 +1051,7 @@ class DashboardTab(QWidget):
         self._auto_rejoin_elapsed = 0
         self._auto_rejoin_requested = False
         self._trigger_rejoin.connect(self._on_run_sequence)
+        self._append_log_signal.connect(self._append_log)
 
         lo = QVBoxLayout(self)
         lo.setContentsMargins(12, 9, 12, 13)
@@ -990,27 +1068,68 @@ class DashboardTab(QWidget):
             stat_row.addWidget(c)
         lo.addLayout(stat_row)
 
-        ov = QFrame(); ov.setObjectName("card")
-        ov.setStyleSheet(f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}")
-        theme.changed.connect(lambda: ov.setStyleSheet(f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"))
-        ov_lo = QVBoxLayout(ov)
-        ov_lo.setContentsMargins(10, 2, 10, 2)
-        ov_lo.setSpacing(0)
-        self._seeds_status, self._eye_seeds, self._seeds_row = self._mk_status_row("Buy Seeds", "seeds")
-        self._tools_status, self._eye_tools, self._tools_row = self._mk_status_row("Buy Tools", "tools")
-        ov_lo.addWidget(self._seeds_row)
-        s = QFrame(); s.setObjectName("innerSep"); s.setFrameShape(QFrame.HLine); s.setFixedHeight(1)
-        ov_lo.addWidget(s)
-        ov_lo.addWidget(self._tools_row)
-        lo.addWidget(ov)
+        log_card = QFrame()
+        log_card.setObjectName("card")
 
-        self._action_lbl = QLabel("")
-        self._action_lbl.setObjectName("actionLog")
-        self._action_lbl.setAlignment(Qt.AlignCenter)
-        self._action_lbl.setWordWrap(False)
-        lo.addStretch()
-        lo.addWidget(self._action_lbl)
-        lo.addStretch()
+        def _style_log_card():
+            log_card.setStyleSheet(
+                f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+                f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+            )
+        _style_log_card()
+        theme.changed.connect(_style_log_card)
+
+        log_card_lo = QVBoxLayout(log_card)
+        log_card_lo.setContentsMargins(0, 0, 0, 0)
+        log_card_lo.setSpacing(0)
+
+        self._log_header_lbl = QLabel("Action Log")
+        self._log_header_lbl.setContentsMargins(10, 6, 10, 0)
+
+        def _style_log_header():
+            t = theme.t
+            self._log_header_lbl.setStyleSheet(
+                f"color: {t.get('text_dim', t.get('subtext', '#888888'))};"
+                f"font-size: 9px; font-weight: 600; letter-spacing: 0.8px;"
+                f"background: transparent; text-transform: uppercase;"
+            )
+        _style_log_header()
+        theme.changed.connect(_style_log_header)
+
+        log_card_lo.addWidget(self._log_header_lbl, 0, Qt.AlignLeft)
+
+        self._log_scroll = QScrollArea()
+        self._log_scroll.setWidgetResizable(True)
+        self._log_scroll.setFrameShape(QFrame.NoFrame)
+        self._log_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._log_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._log_scroll.setFixedHeight(120)
+
+        def _style_log_scroll():
+            self._log_scroll.setStyleSheet(
+                "QScrollArea { background: transparent; border: none; }"
+                "QScrollArea > QWidget > QWidget { background: transparent; }"
+            )
+        _style_log_scroll()
+        theme.changed.connect(_style_log_scroll)
+
+        self._log_inner = QWidget()
+        self._log_inner.setStyleSheet("background: transparent;")
+        self._log_layout = QVBoxLayout(self._log_inner)
+        self._log_layout.setContentsMargins(10, 0, 10, 8)
+        self._log_layout.setSpacing(2)
+        self._log_layout.addStretch()
+        self._log_scroll.setWidget(self._log_inner)
+
+        self._log_scroll_anim = QPropertyAnimation(self._log_scroll.verticalScrollBar(), b"value")
+        self._log_scroll_anim.setDuration(180)
+        self._log_scroll_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._log_scroll.verticalScrollBar().rangeChanged.connect(
+            lambda mn, mx: self._log_scroll.verticalScrollBar().setValue(mx)
+        )
+
+        log_card_lo.addWidget(self._log_scroll)
+        lo.addWidget(log_card)
 
         btn_row = QHBoxLayout(); btn_row.setSpacing(6)
 
@@ -1041,8 +1160,6 @@ class DashboardTab(QWidget):
         self._timer.timeout.connect(self._tick)
         self._timer.start()
 
-        theme.changed.connect(self._refresh_icons)
-        self._refresh_icons()
 
     def _fmt_shop(self):
         rem = _next_5min_seconds()
@@ -1070,67 +1187,42 @@ class DashboardTab(QWidget):
         vl.addWidget(h); vl.addWidget(v)
         return card, v
 
-    def _mk_status_row(self, label, icon_name):
-        row = QWidget(); row.setFixedHeight(34)
-        rl = QHBoxLayout(row); rl.setContentsMargins(0, 0, 0, 0); rl.setSpacing(7)
-
-        icon_lbl = QLabel(); icon_lbl.setFixedSize(13, 13)
-        icon_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-        name_lbl = QLabel(label); name_lbl.setObjectName("dimText")
-
-        status_lbl = QLabel("Inactive")
-        status_lbl.setObjectName("statusInactive")
-        status_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        eye = EyeLabel()
-
-        rl.addWidget(icon_lbl); rl.addWidget(name_lbl)
-        rl.addStretch(); rl.addWidget(status_lbl); rl.addWidget(eye)
-
-        icon_lbl._icon_name = icon_name
-        self._refresh_icon_lbl(icon_lbl, icon_name)
-
-        if "Seeds" in label:
-            eye.clicked.connect(lambda: self._nav_seeds and self._nav_seeds())
-        else:
-            eye.clicked.connect(lambda: self._nav_tools and self._nav_tools())
-
-        return status_lbl, eye, row
-
-    def _refresh_icon_lbl(self, lbl, name):
-        ic = icon_tab(name, theme.t["dim"], 13)
-        lbl.setPixmap(ic.pixmap(13, 13))
-
-    def _refresh_icons(self):
-        t = theme.t
-        for row_widget in [self._seeds_row, self._tools_row]:
-            for child in row_widget.findChildren(QLabel):
-                if hasattr(child, "_icon_name"):
-                    self._refresh_icon_lbl(child, child._icon_name)
-        for eye, status_lbl in [(self._eye_seeds, self._seeds_status), (self._eye_tools, self._tools_status)]:
-            active = status_lbl.objectName() == "statusActive"
-            col = t["accent"] if active else t["dim"]
-            eye.set_color(col)
-
-    def _set_status(self, lbl, active):
-        lbl.setText("Active" if active else "Inactive")
-        lbl.setObjectName("statusActive" if active else "statusInactive")
-        lbl.style().unpolish(lbl); lbl.style().polish(lbl)
-        self._refresh_icons()
-
-    def set_seeds_status(self, active): self._set_status(self._seeds_status, active)
-    def set_tools_status(self, active): self._set_status(self._tools_status, active)
 
     def _repolish(self, w):
         w.style().unpolish(w); w.style().polish(w); w.update()
 
     def _set_action(self, text):
-        QMetaObject.invokeMethod(
-            self._action_lbl, "setText",
-            Qt.QueuedConnection,
-            Q_ARG(str, text)
-        )
+        self._append_log_signal.emit(text)
+
+    def _append_log(self, text):
+        lbl = QLabel(text)
+        lbl.setObjectName("actionLog")
+        lbl.setWordWrap(False)
+        lbl.setAlignment(Qt.AlignCenter)
+
+        def _style_lbl():
+            lbl.setStyleSheet(f"color: {theme.t['dim']}; font-size: 11px; background: transparent;")
+        _style_lbl()
+        theme.changed.connect(_style_lbl)
+
+        self._log_layout.addWidget(lbl)
+
+        MAX_ENTRIES = 50
+        entries = [self._log_layout.itemAt(i).widget()
+                   for i in range(self._log_layout.count())
+                   if self._log_layout.itemAt(i).widget() is not None]
+        while len(entries) > MAX_ENTRIES:
+            old_w = entries.pop(0)
+            self._log_layout.removeWidget(old_w)
+            old_w.deleteLater()
+
+    def _clear_log(self):
+        for i in reversed(range(self._log_layout.count())):
+            item = self._log_layout.itemAt(i)
+            if item and item.widget():
+                item.widget().deleteLater()
+                self._log_layout.removeItem(item)
+        self._log_layout.addStretch()
     def update_start_label(self, key):
         self._btn_start.setText(f"  Start  |  {key}")
 
@@ -1150,6 +1242,7 @@ class DashboardTab(QWidget):
             self._status_lbl.setText("Running")
             self._status_lbl.setObjectName("statusRunning")
             self._repolish(self._status_lbl)
+            self._clear_log()
             self._set_action("Starting sequence...")
 
             def _rejoin_then_start():
@@ -1242,7 +1335,13 @@ class DashboardTab(QWidget):
 
                         if _stop.is_set(): return
                         self._set_action("Waiting for Roblox to load...")
-                        _stop.wait(3)
+                        _rejoin_load_wait = 3.0
+                        if self._settings_tab is not None:
+                            try:
+                                _rejoin_load_wait = float(self._settings_tab._rejoin_load_wait_edit.text().strip())
+                            except Exception:
+                                _rejoin_load_wait = 3.0
+                        _stop.wait(_rejoin_load_wait)
                         if _stop.is_set(): return
                         resize_roblox_window()
                         _stop.wait(1)
@@ -1285,7 +1384,13 @@ class DashboardTab(QWidget):
 
                         if _stop.is_set(): return
                         self._set_action("Joined. Starting sequence...")
-                        _stop.wait(2)
+                        _rejoin_start_wait = 2.0
+                        if self._settings_tab is not None:
+                            try:
+                                _rejoin_start_wait = float(self._settings_tab._rejoin_start_wait_edit.text().strip())
+                            except Exception:
+                                _rejoin_start_wait = 2.0
+                        _stop.wait(_rejoin_start_wait)
                         if _stop.is_set(): return
                     except Exception:
                         if _stop.is_set(): return
@@ -1322,7 +1427,6 @@ class DashboardTab(QWidget):
         self._repolish(self._status_lbl)
         self._elapsed_lbl.setText("00:00:00")
         self._cycle_lbl.setText("0")
-        self._action_lbl.setText("")
 
     def run_seedshop_sequence(self):
         if not _PYNPUT_OK:
@@ -1344,6 +1448,11 @@ class DashboardTab(QWidget):
         def _sequence():
             kb = KeyboardController()
             mc = MouseController()
+
+            def _input_wait():
+                if self._settings_tab is not None:
+                    return self._settings_tab.input_wait()
+                return 0.1
 
             self._session_purchases = {}
             if self._webhook_tab is not None:
@@ -1479,7 +1588,7 @@ class DashboardTab(QWidget):
                 time.sleep(random.uniform(0.03, 0.1))
                 _send_mouse_click()
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
                 try:
                     resize_roblox_window()
                 except Exception:
@@ -1487,10 +1596,10 @@ class DashboardTab(QWidget):
                 _step(0.05)
 
                 kb.press('s')
-                _step(0.1)
+                _step(_input_wait())
                 kb.release('s')
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
 
                 kb.press('e')
                 kb.release('e')
@@ -1542,32 +1651,32 @@ class DashboardTab(QWidget):
                 kb.press(nav_pynput)
                 kb.release(nav_pynput)
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
 
                 kb.press(nav_pynput)
                 kb.release(nav_pynput)
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
 
                 kb.press(Key.right)
                 kb.release(Key.right)
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
 
                 kb.press(Key.right)
                 kb.release(Key.right)
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
 
                 kb.press(Key.enter)
                 kb.release(Key.enter)
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
 
                 kb.press(nav_pynput)
                 kb.release(nav_pynput)
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
 
                 import random, ctypes, ctypes.wintypes
 
@@ -1787,12 +1896,12 @@ class DashboardTab(QWidget):
                         kb.press(Key.down)
                         kb.release(Key.down)
                         if stop.is_set(): return
-                        _step(0.1)
+                        _step(_input_wait())
 
                     kb.press(Key.left)
                     kb.release(Key.left)
                     if stop.is_set(): return
-                    _step(0.1)
+                    _step(_input_wait())
 
                     if _is_no_stock(seed_oos_row[name]):
                         self._set_action(f"{name} — out of stock, skipping")
@@ -1806,32 +1915,32 @@ class DashboardTab(QWidget):
                                 kb.press(nav_pynput)
                                 kb.release(nav_pynput)
                                 if stop.is_set(): return
-                                _step(0.1)
+                                _step(_input_wait())
 
                                 kb.press(nav_pynput)
                                 kb.release(nav_pynput)
                                 if stop.is_set(): return
-                                _step(0.1)
+                                _step(_input_wait())
 
                                 kb.press(Key.right)
                                 kb.release(Key.right)
                                 if stop.is_set(): return
-                                _step(0.1)
+                                _step(_input_wait())
 
                                 kb.press(Key.right)
                                 kb.release(Key.right)
                                 if stop.is_set(): return
-                                _step(0.1)
+                                _step(_input_wait())
 
                                 kb.press(Key.enter)
                                 kb.release(Key.enter)
                                 if stop.is_set(): return
-                                _step(0.1)
+                                _step(_input_wait())
 
                                 kb.press(nav_pynput)
                                 kb.release(nav_pynput)
                                 if stop.is_set(): return
-                                _step(0.1)
+                                _step(_input_wait())
                             else:
                                 _return_to_garden(kb, nav_pynput)
                         continue
@@ -1844,7 +1953,7 @@ class DashboardTab(QWidget):
                         if stop.is_set(): return
                         kb.press(Key.enter)
                         kb.release(Key.enter)
-                        _step(0.1)
+                        _step(_input_wait())
                         if _is_no_stock(seed_oos_row[name]):
                             _oos_seeds.add(name)
                             self._set_action(f"{name} — out of stock, skipping")
@@ -1864,32 +1973,32 @@ class DashboardTab(QWidget):
                             kb.press(nav_pynput)
                             kb.release(nav_pynput)
                             if stop.is_set(): return
-                            _step(0.1)
+                            _step(_input_wait())
 
                             kb.press(nav_pynput)
                             kb.release(nav_pynput)
                             if stop.is_set(): return
-                            _step(0.1)
+                            _step(_input_wait())
 
                             kb.press(Key.right)
                             kb.release(Key.right)
                             if stop.is_set(): return
-                            _step(0.1)
+                            _step(_input_wait())
 
                             kb.press(Key.right)
                             kb.release(Key.right)
                             if stop.is_set(): return
-                            _step(0.1)
+                            _step(_input_wait())
 
                             kb.press(Key.enter)
                             kb.release(Key.enter)
                             if stop.is_set(): return
-                            _step(0.1)
+                            _step(_input_wait())
 
                             kb.press(nav_pynput)
                             kb.release(nav_pynput)
                             if stop.is_set(): return
-                            _step(0.1)
+                            _step(_input_wait())
                         else:
                             _return_to_garden(kb, nav_pynput)
 
@@ -1914,12 +2023,12 @@ class DashboardTab(QWidget):
                         kb.press(Key.down)
                         kb.release(Key.down)
                         if stop.is_set(): return
-                        _step(0.1)
+                        _step(_input_wait())
 
                     kb.press(Key.left)
                     kb.release(Key.left)
                     if stop.is_set(): return
-                    _step(0.1)
+                    _step(_input_wait())
 
                     if _is_no_stock_tool(tool_oos_row[name]):
                         self._set_action(f"{name} — out of stock, skipping")
@@ -1939,7 +2048,7 @@ class DashboardTab(QWidget):
                         if stop.is_set(): return
                         kb.press(Key.enter)
                         kb.release(Key.enter)
-                        _step(0.1)
+                        _step(_input_wait())
                         if _is_no_stock_tool(tool_oos_row[name]):
                             _oos_tools.add(name)
                             self._set_action(f"{name} — out of stock, skipping")
@@ -2118,19 +2227,19 @@ class DashboardTab(QWidget):
                 kb.press(nav_pynput)
                 kb.release(nav_pynput)
                 if stop.is_set(): return
-                _step(0.1)
+                _step(_input_wait())
 
                 for _ in range(2):
                     kb.press(Key.right)
                     kb.release(Key.right)
                     if stop.is_set(): return
-                    _step(0.1)
+                    _step(_input_wait())
 
                 for _ in range(2):
                     kb.press(Key.down)
                     kb.release(Key.down)
                     if stop.is_set(): return
-                    _step(0.1)
+                    _step(_input_wait())
 
                 self._set_action("Buying tools...")
                 _buy_tools()
@@ -2199,13 +2308,19 @@ class DashboardTab(QWidget):
                             time.sleep(random.uniform(0.008, 0.018))
                         time.sleep(random.uniform(0.03, 0.1))
                         _send_mouse_click()
-                        _step(0.1)
+                        _teleport_delay = 0.1
+                        if self._settings_tab is not None:
+                            try:
+                                _teleport_delay = float(self._settings_tab._teleport_delay_edit.text().strip())
+                            except Exception:
+                                _teleport_delay = 0.1
+                        _step(_teleport_delay)
 
                         kb.press('s')
-                        _step(0.1)
+                        _step(_input_wait())
                         kb.release('s')
                         if stop.is_set(): return
-                        _step(0.1)
+                        _step(_input_wait())
 
                         kb.press('e')
                         kb.release('e')
@@ -2293,19 +2408,19 @@ class DashboardTab(QWidget):
                     kb.press(nav_pynput)
                     kb.release(nav_pynput)
                     if stop.is_set(): return
-                    _step(0.1)
+                    _step(_input_wait())
 
                     for _ in range(2):
                         kb.press(Key.right)
                         kb.release(Key.right)
                         if stop.is_set(): return
-                        _step(0.1)
+                        _step(_input_wait())
 
                     for _ in range(2):
                         kb.press(Key.down)
                         kb.release(Key.down)
                         if stop.is_set(): return
-                        _step(0.1)
+                        _step(_input_wait())
 
                     self._set_action("Buying seeds...")
                     _buy_seeds()
@@ -2325,11 +2440,24 @@ class DashboardTab(QWidget):
                     stop.set()
 
             while not stop.is_set():
+                _emitted_waiting = False
                 while not stop.is_set():
                     if _next_5min_seconds() <= 1:
                         break
-                    self._set_action("Waiting for shop timer...")
+                    if not _emitted_waiting:
+                        self._set_action("Waiting for shop timer...")
+                        _emitted_waiting = True
                     _step(0.5)
+                if stop.is_set(): return
+                _srd = 0.0
+                if self._settings_tab is not None:
+                    try:
+                        _srd = self._settings_tab.shop_refresh_delay()
+                    except Exception:
+                        _srd = 0.0
+                if _srd > 0:
+                    self._set_action("Waiting after shop refresh...")
+                    _step(_srd)
                 if stop.is_set(): return
                 _shop_run()
                 if not stop.is_set():
@@ -3336,50 +3464,21 @@ _GUIDE_TEXT = [
 ]
 
 
-class _BackArrowIcon(QWidget):
+class _BackArrowIcon(QPushButton):
     clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(28, 28)
+        self.setObjectName("btnBackArrow")
+        self.setFixedSize(26, 26)
         self.setCursor(Qt.PointingHandCursor)
-        self._hovered = False
+        self.setFlat(True)
+        self._refresh()
+        theme.changed.connect(self._refresh)
 
-    def enterEvent(self, e):
-        self._hovered = True
-        self.update()
-        super().enterEvent(e)
-
-    def leaveEvent(self, e):
-        self._hovered = False
-        self.update()
-        super().leaveEvent(e)
-
-    def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(e)
-
-    def paintEvent(self, e):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        t = theme.t
-        base_color = QColor(t["text"])
-        color = QColor(base_color)
-        color.setAlphaF(0.85 if self._hovered else 0.55)
-        pen = QPen(color)
-        pen.setWidthF(2.0)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
-        p.setPen(pen)
-        p.setBrush(Qt.NoBrush)
-        cx, cy = 14.0, 14.0
-        path = QPainterPath()
-        path.moveTo(cx + 5, cy - 5)
-        path.lineTo(cx - 4, cy)
-        path.lineTo(cx + 5, cy + 5)
-        p.drawPath(path)
-        p.end()
+    def _refresh(self):
+        self.setIcon(_svg_icon(_SVG_BACK, 14, theme.t["dim"]))
+        self.setIconSize(QSize(14, 14))
 
 
 class SettingsTab(QWidget):
@@ -3396,11 +3495,26 @@ class SettingsTab(QWidget):
 
         self._main_page = QWidget()
         self._guide_page = QWidget()
+
+        class _FixedPage(QWidget):
+            def minimumSizeHint(self): return QSize(0, 0)
+            def sizeHint(self): return QSize(0, 0)
+
+        self._debug_warn_page = _FixedPage()
+        self._debug_settings_page = _FixedPage()
         self._stack.addWidget(self._main_page)
         self._stack.addWidget(self._guide_page)
+        self._stack.addWidget(self._debug_warn_page)
+        self._stack.addWidget(self._debug_settings_page)
 
+        self._dash = None
+        self._autobuy = None
+        self._harvest = None
+        self._webhook = None
         self._build_main_page()
         self._build_guide_page()
+        self._build_debug_warn_page()
+        self._build_debug_settings_page()
 
     def _build_main_page(self):
         lo = QVBoxLayout(self._main_page)
@@ -3505,8 +3619,53 @@ class SettingsTab(QWidget):
         guide_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         guide_btn.clicked.connect(self._show_guide)
 
+        debug_btn = QPushButton()
+        debug_btn.setObjectName("btnDebugIcon")
+        debug_btn.setCursor(Qt.PointingHandCursor)
+        debug_btn.setFixedSize(44, 44)
+        debug_btn.setToolTip("Debug Settings")
+        debug_btn.clicked.connect(self._show_debug_warn)
+
+        def _apply_debug_btn_style():
+            t = theme.t
+            d = t["is_dark"]
+            debug_btn.setStyleSheet(
+                f"QPushButton {{ background: {'rgba(255,255,255,0.06)' if d else 'rgba(0,0,0,0.05)'}; "
+                f"border: 1px solid {t['border']}; border-radius: 7px; }}"
+                f"QPushButton:hover {{ background: {'rgba(255,255,255,0.12)' if d else 'rgba(0,0,0,0.10)'}; }}"
+                f"QPushButton:pressed {{ background: {'rgba(255,255,255,0.18)' if d else 'rgba(0,0,0,0.15)'}; }}"
+            )
+
+        def _set_debug_btn_icon():
+            t = theme.t
+            col = QColor(t["dim"])
+            sz = 18
+            pm = QPixmap(sz, sz)
+            pm.fill(Qt.transparent)
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.Antialiasing)
+            pen = QPen(col, 1.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            p.setPen(pen)
+            p.setBrush(Qt.NoBrush)
+            cx = cy = sz / 2
+            p.drawEllipse(QRectF(cx - 5.5, cy - 5.5, 11, 11))
+            p.drawLine(QPointF(cx, cy - 3.2), QPointF(cx, cy + 0.5))
+            dot_r = 1.1
+            p.setBrush(QBrush(col))
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(QRectF(cx - dot_r, cy + 2.5, dot_r * 2, dot_r * 2))
+            p.end()
+            debug_btn.setIcon(QIcon(pm))
+            debug_btn.setIconSize(QSize(sz, sz))
+
+        _apply_debug_btn_style()
+        _set_debug_btn_icon()
+        theme.changed.connect(_apply_debug_btn_style)
+        theme.changed.connect(_set_debug_btn_icon)
+
         btn_row.addWidget(discord_btn)
         btn_row.addWidget(guide_btn)
+        btn_row.addWidget(debug_btn)
         lo.addLayout(btn_row)
 
         self._start_key.key_changed.connect(self.start_key_changed)
@@ -3514,6 +3673,305 @@ class SettingsTab(QWidget):
         self._start_key.key_changed.connect(lambda v: _reg_save({"start_key": v}))
         self._reload_key.key_changed.connect(lambda v: _reg_save({"reload_key": v}))
         self._nav.key_changed.connect(lambda v: _reg_save({"nav_key": v}))
+
+    def _build_debug_warn_page(self):
+        lo = QVBoxLayout(self._debug_warn_page)
+        lo.setContentsMargins(20, 16, 20, 16)
+        lo.setSpacing(0)
+        lo.addStretch(1)
+
+        icon_lbl = QLabel()
+        icon_lbl.setAlignment(Qt.AlignCenter)
+
+        def _render_warn_icon():
+            sz = 38
+            pm = QPixmap(sz, sz)
+            pm.fill(Qt.transparent)
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.Antialiasing)
+            cx = cy = sz / 2
+            p.setBrush(QBrush(QColor("#ef4444")))
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(QRectF(cx - 15, cy - 15, 30, 30))
+            pen = QPen(QColor("#ffffff"), 2.5, Qt.SolidLine, Qt.RoundCap)
+            p.setPen(pen)
+            p.drawLine(QPointF(cx, cy - 8), QPointF(cx, cy + 1))
+            p.setBrush(QBrush(QColor("#ffffff")))
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(QRectF(cx - 1.8, cy + 5.5, 3.6, 3.6))
+            p.end()
+            icon_lbl.setPixmap(pm)
+
+        _render_warn_icon()
+        theme.changed.connect(_render_warn_icon)
+        lo.addWidget(icon_lbl)
+        lo.addSpacing(10)
+
+        title_lbl = QLabel("Debug Settings")
+        title_lbl.setAlignment(Qt.AlignCenter)
+
+        def _update_title_style():
+            title_lbl.setStyleSheet("color: #ef4444; font-size: 13px; font-weight: 700;")
+        _update_title_style()
+        theme.changed.connect(_update_title_style)
+        lo.addWidget(title_lbl)
+        lo.addSpacing(6)
+
+        msg_lbl = QLabel(
+            "These settings are for debugging only.\n"
+            "Changing them incorrectly can break\n"
+            "the macro. Only proceed if you have a\n"
+            "somewhat understanding of the macro."
+        )
+        msg_lbl.setAlignment(Qt.AlignCenter)
+
+        def _update_msg_style():
+            msg_lbl.setStyleSheet(f"color: {theme.t['dim']}; font-size: 11px;")
+        _update_msg_style()
+        theme.changed.connect(_update_msg_style)
+        lo.addWidget(msg_lbl)
+        lo.addStretch(1)
+        lo.addSpacing(6)
+
+        go_back_btn = QPushButton("Go Back")
+        go_back_btn.setCursor(Qt.PointingHandCursor)
+        go_back_btn.setFixedHeight(36)
+        go_back_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        def _style_go_back():
+            hov = "rgba(255,255,255,0.07)" if theme.t["is_dark"] else "rgba(0,0,0,0.05)"
+            go_back_btn.setStyleSheet(
+                f"QPushButton {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+                f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; "
+                f"color: {theme.t['text']}; font-size: 12px; font-weight: 600; border-radius: 7px; }}"
+                f"QPushButton:hover {{ background: {hov}; }}"
+                f"QPushButton:pressed {{ background: {hov}; }}"
+            )
+        _style_go_back()
+        theme.changed.connect(_style_go_back)
+        go_back_btn.clicked.connect(self._show_main)
+        lo.addWidget(go_back_btn)
+        lo.addSpacing(6)
+
+        proceed_btn = QPushButton("I Understand, Continue")
+        proceed_btn.setCursor(Qt.PointingHandCursor)
+        proceed_btn.setFixedHeight(36)
+        proceed_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        def _style_proceed():
+            proceed_btn.setStyleSheet(
+                "QPushButton { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.45); "
+                "color: #ef4444; font-size: 12px; font-weight: 600; border-radius: 7px; }"
+                "QPushButton:hover { background: rgba(239,68,68,0.25); }"
+                "QPushButton:pressed { background: rgba(239,68,68,0.38); }"
+            )
+        _style_proceed()
+        proceed_btn.clicked.connect(self._show_debug_settings)
+        lo.addWidget(proceed_btn)
+
+    def _build_debug_settings_page(self):
+        _cfg = _reg_load()
+        lo = QVBoxLayout(self._debug_settings_page)
+        lo.setContentsMargins(12, 9, 12, 13)
+        lo.setSpacing(6)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
+        back = _BackArrowIcon()
+        back.clicked.connect(self._show_main)
+        header_row.addWidget(back, 0, Qt.AlignVCenter)
+        title_lbl = QLabel("Debug Settings")
+        title_font = QFont()
+        title_font.setPointSize(11)
+        title_font.setWeight(QFont.Bold)
+        title_lbl.setFont(title_font)
+
+        def _update_title():
+            title_lbl.setStyleSheet(f"color: {theme.t['dim']}; font-size: 15px; font-weight: 700;")
+        _update_title()
+        theme.changed.connect(_update_title)
+        header_row.addWidget(title_lbl, 0, Qt.AlignVCenter)
+        header_row.addStretch()
+        lo.addLayout(header_row)
+        lo.addSpacing(4)
+
+        card = QFrame()
+        card.setObjectName("card")
+
+        def _style_card():
+            card.setStyleSheet(
+                f"QFrame#card {{ background: {theme.t.get('stat_card_bg', theme.t['card'])}; "
+                f"border: 1px solid {theme.t.get('border_strong', theme.t['border'])}; border-radius: 9px; }}"
+            )
+        _style_card()
+        theme.changed.connect(_style_card)
+
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(12, 4, 12, 8)
+        cl.setSpacing(0)
+
+        ROW_H = 34
+
+        grid_widget = QWidget()
+        grid = QGridLayout(grid_widget)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(0)
+        grid.setVerticalSpacing(0)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 0)
+
+        rows_data = [
+            ("Post Teleport Wait (s)", "teleport_delay",      "0.1", "wait after shop teleport"),
+            ("Rejoin Load Wait (s)",   "rejoin_load_wait",    "3",   "after deep link opens"),
+            ("Rejoin Start Wait (s)",  "rejoin_start_wait",   "2",   "after joined"),
+            ("Input Wait (s)",         "input_wait",          "0.1", "between shop inputs"),
+            ("Shop Refresh Delay (s)", "shop_refresh_delay",  "0",   "wait after shop refreshes"),
+        ]
+
+        edit_attrs = [
+            "_teleport_delay_edit",
+            "_rejoin_load_wait_edit",
+            "_rejoin_start_wait_edit",
+            "_input_wait_edit",
+            "_shop_refresh_delay_edit",
+        ]
+
+        reg_keys = [r[1] for r in rows_data]
+
+        seps = []
+
+        for i, ((label_text, reg_key, default, hint_text), attr) in enumerate(zip(rows_data, edit_attrs)):
+            row_idx = i * 2
+
+            grid.setRowMinimumHeight(row_idx, ROW_H)
+
+            lbl = QLabel(label_text)
+            lbl.setObjectName("dimText")
+            lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            grid.addWidget(lbl, row_idx, 0, Qt.AlignVCenter | Qt.AlignLeft)
+
+            hint = QLabel(hint_text)
+            hint.setObjectName("dimText")
+            hint.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
+            grid.addWidget(hint, row_idx, 1, Qt.AlignVCenter | Qt.AlignRight)
+
+            edit = QLineEdit(_cfg.get(reg_key, default))
+            edit.setObjectName("keyInput")
+            edit.setFixedSize(52, 24)
+            edit.setAlignment(Qt.AlignCenter)
+            edit.setPlaceholderText(default)
+            edit.textChanged.connect(lambda v, k=reg_key: _reg_save({k: v}))
+            setattr(self, attr, edit)
+
+            edit_wrapper = QWidget()
+            ew_layout = QHBoxLayout(edit_wrapper)
+            ew_layout.setContentsMargins(7, 0, 0, 0)
+            ew_layout.setSpacing(0)
+            ew_layout.addWidget(edit, 0, Qt.AlignVCenter)
+            grid.addWidget(edit_wrapper, row_idx, 2, Qt.AlignVCenter | Qt.AlignRight)
+
+            if i < len(rows_data) - 1:
+                sep = QFrame()
+                sep.setObjectName("innerSep")
+                sep.setFrameShape(QFrame.HLine)
+                sep.setFixedHeight(1)
+                seps.append(sep)
+                grid.setRowMinimumHeight(row_idx + 1, 1)
+                grid.addWidget(sep, row_idx + 1, 0, 1, 3)
+
+        cl.addWidget(grid_widget)
+
+        sep_btn = QFrame()
+        sep_btn.setObjectName("innerSep")
+        sep_btn.setFrameShape(QFrame.HLine)
+        sep_btn.setFixedHeight(1)
+        cl.addWidget(sep_btn)
+
+        btn_grid_widget = QWidget()
+        btn_grid = QGridLayout(btn_grid_widget)
+        btn_grid.setContentsMargins(0, 6, 0, 0)
+        btn_grid.setHorizontalSpacing(10)
+        btn_grid.setVerticalSpacing(0)
+        btn_grid.setRowMinimumHeight(0, ROW_H)
+        btn_grid.setColumnStretch(0, 1)
+        btn_grid.setColumnStretch(1, 1)
+
+        self._btn_queue_rejoin = QPushButton("Queue Hourly Rejoin")
+        self._btn_queue_rejoin.setObjectName("btnTest")
+        self._btn_queue_rejoin.setFixedHeight(28)
+        self._btn_queue_rejoin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._btn_queue_rejoin.setCursor(Qt.PointingHandCursor)
+        self._btn_queue_rejoin.clicked.connect(self._on_queue_rejoin_clicked)
+
+        self._btn_reset_settings = QPushButton("Reset All Settings")
+        self._btn_reset_settings.setObjectName("btnReload")
+        self._btn_reset_settings.setFixedHeight(28)
+        self._btn_reset_settings.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._btn_reset_settings.setCursor(Qt.PointingHandCursor)
+        self._btn_reset_settings.clicked.connect(self._reset_all_settings)
+
+        btn_grid.addWidget(self._btn_queue_rejoin, 0, 0, Qt.AlignVCenter)
+        btn_grid.addWidget(self._btn_reset_settings, 0, 1, Qt.AlignVCenter)
+        cl.addWidget(btn_grid_widget)
+
+        lo.addWidget(card)
+        lo.addStretch()
+
+    def _on_queue_rejoin_clicked(self):
+        if self._dash is not None:
+            self._dash._queue_debug_rejoin()
+
+    def _reset_all_settings(self):
+        try:
+            import winreg
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, _REG_KEY)
+        except Exception:
+            pass
+
+        self._start_key.setText("F1")
+        self._start_key._value = "F1"
+        self._start_key.key_changed.emit("F1")
+        self._reload_key.setText("F2")
+        self._reload_key._value = "F2"
+        self._reload_key.key_changed.emit("F2")
+        self._nav.setText("\\")
+        self._nav._value = "\\"
+        self._nav.key_changed.emit("\\")
+        self._rejoin_hours.setText("0")
+        self._server_link.setText("")
+        self._teleport_delay_edit.setText("0.1")
+        self._rejoin_load_wait_edit.setText("3")
+        self._rejoin_start_wait_edit.setText("2")
+        self._input_wait_edit.setText("0.1")
+        self._shop_refresh_delay_edit.setText("0")
+
+        if self._autobuy is not None:
+            for r in self._autobuy._seed_rows + self._autobuy._tool_rows:
+                if r.is_on():
+                    r.set_on(False)
+
+        if self._harvest is not None:
+            self._harvest._enable_sw.set_on(False)
+            self._harvest._threshold_edit.setText("5")
+            self._harvest._load_route_from_string("")
+            _reg_save({"harvest_route": ""})
+
+        if self._webhook is not None:
+            self._webhook._url_edit.setText("")
+            self._webhook._uid_edit.setText("")
+            self._webhook._enable_sw.set_on(False)
+            self._webhook._ping_sw.set_on(False)
+            for r in self._webhook._ping_seed_rows + self._webhook._ping_tool_rows:
+                if r.is_on():
+                    r.set_on(False)
+
+    def _show_debug_warn(self):
+        self._stack.setCurrentIndex(2)
+
+    def _show_debug_settings(self):
+        self._stack.setCurrentIndex(3)
 
     def _build_guide_page(self):
         lo = QVBoxLayout(self._guide_page)
@@ -3680,6 +4138,35 @@ class SettingsTab(QWidget):
     def reload_key(self): return self._reload_key.value()
     def server_link(self): return self._server_link.text()
     def auto_rejoin_hours(self): return self._rejoin_hours.text().strip() or "0"
+    def teleport_delay(self):
+        try:
+            return float(self._teleport_delay_edit.text().strip())
+        except Exception:
+            return 0.1
+
+    def rejoin_load_wait(self):
+        try:
+            return float(self._rejoin_load_wait_edit.text().strip())
+        except Exception:
+            return 3.0
+
+    def rejoin_start_wait(self):
+        try:
+            return float(self._rejoin_start_wait_edit.text().strip())
+        except Exception:
+            return 2.0
+
+    def input_wait(self):
+        try:
+            return float(self._input_wait_edit.text().strip())
+        except Exception:
+            return 0.1
+
+    def shop_refresh_delay(self):
+        try:
+            return float(self._shop_refresh_delay_edit.text().strip())
+        except Exception:
+            return 0.0
 
     def showEvent(self, e):
         super().showEvent(e)
@@ -4038,7 +4525,7 @@ class WebhookTab(QWidget):
             "title": "moris Garden Horizons macro",
             "color": self._accent_color_int(),
             "fields": fields,
-            "footer": {"text": "v1.3.3"},
+            "footer": {"text": "v1.4"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -4148,7 +4635,7 @@ class WebhookTab(QWidget):
                         "description": "Test message from moris Garden Horizons macro",
                         "color": self._accent_color_int(),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "footer": {"text": "v1.3.3"},
+                        "footer": {"text": "v1.4"},
                     }]
                 }
                 body, _ = self._http(url + "?wait=true", payload)
@@ -4289,8 +4776,10 @@ class MainWindow(QWidget):
         self._dash._harvest_tab = self._harvest
         self._dash._webhook_tab = self._webhook
         self._dash._settings_tab = self._settings
-        self._autobuy.seeds_status_changed.connect(self._dash.set_seeds_status)
-        self._autobuy.tools_status_changed.connect(self._dash.set_tools_status)
+        self._settings._dash = self._dash
+        self._settings._autobuy = self._autobuy
+        self._settings._harvest = self._harvest
+        self._settings._webhook = self._webhook
 
         self._settings.start_key_changed.connect(self._on_start_key)
         self._settings.reload_key_changed.connect(self._on_reload_key)
