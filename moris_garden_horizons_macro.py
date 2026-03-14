@@ -1382,7 +1382,7 @@ class DashboardTab(QWidget):
                         for _ in range(300):
                             if _stop.is_set(): return
                             _col2 = _get_px(_TARGET_X, _TARGET_Y)
-                            if all(abs(_col2[_i] - _TARGET_COLOR[_i]) <= 5 for _i in range(3)):
+                            if all(abs(_col2[_i] - _TARGET_COLOR[_i]) <= 20 for _i in range(3)):
                                 _button_found = True
                                 break
                             if not _roblox_focused():
@@ -1773,7 +1773,7 @@ class DashboardTab(QWidget):
                 "Carrot", "Corn", "Onion", "Strawberry", "Mushroom",
                 "Beetroot", "Tomato", "Apple", "Rose", "Wheat",
                 "Banana", "Plum", "Potato", "Cabbage", "Cherry",
-                "Bamboo", "Mango",
+                "Bamboo", "Mango", "Watermelon", "Pineapple",
             ]
 
             seed_position = {
@@ -1794,12 +1794,14 @@ class DashboardTab(QWidget):
                 "Cherry":     28,
                 "Bamboo":     30,
                 "Mango":      32,
+                "Watermelon": 34,
+                "Pineapple":  36,
             }
 
             tool_order = [
                 "Watering Can", "Basic Sprinkler", "Harvest Bell",
                 "Turbo Sprinkler", "Favorite Tool", "Super Sprinkler",
-                "Trowel",
+                "Trowel", "Reverter",
             ]
 
             tool_position = {
@@ -1810,6 +1812,7 @@ class DashboardTab(QWidget):
                 "Favorite Tool":   8,
                 "Super Sprinkler": 10,
                 "Trowel":          12,
+                "Reverter":        14,
             }
 
             seed_oos_row = {
@@ -1830,6 +1833,8 @@ class DashboardTab(QWidget):
                 "Cherry":     2,
                 "Bamboo":     2,
                 "Mango":      2,
+                "Watermelon": 2,
+                "Pineapple":  2,
             }
 
             tool_oos_row = {
@@ -1840,6 +1845,7 @@ class DashboardTab(QWidget):
                 "Favorite Tool":   2,
                 "Super Sprinkler": 2,
                 "Trowel":          2,
+                "Reverter":        2,
             }
 
             def _tools_active():
@@ -2752,6 +2758,8 @@ class AutoBuyTab(QWidget):
             "Cherry":     _pixmap_from_b64(_CHERRY_B64),
             "Bamboo":     _pixmap_from_b64(_BAMBOO_B64),
             "Mango":      _pixmap_from_b64(_MANGO_B64),
+            "Watermelon": _pixmap_from_b64(_CARROT_B64),
+            "Pineapple":  _pixmap_from_b64(_CARROT_B64),
         }
         tool_icons = {
             "Watering Can":    _pixmap_from_b64(_WATERING_CAN_B64),
@@ -2761,6 +2769,7 @@ class AutoBuyTab(QWidget):
             "Favorite Tool":   _pixmap_from_b64(_FAVORITE_TOOL_B64),
             "Super Sprinkler": _pixmap_from_b64(_SUPER_SPRINKLER_B64),
             "Trowel":          _pixmap_from_b64(_TROWEL_B64),
+            "Reverter":        _pixmap_from_b64(_CARROT_B64),
         }
 
         _cfg = _reg_load()
@@ -4220,6 +4229,8 @@ class WebhookTab(QWidget):
             "Cherry":     _pixmap_from_b64(_CHERRY_B64),
             "Bamboo":     _pixmap_from_b64(_BAMBOO_B64),
             "Mango":      _pixmap_from_b64(_MANGO_B64),
+            "Watermelon": _pixmap_from_b64(_CARROT_B64),
+            "Pineapple":  _pixmap_from_b64(_CARROT_B64),
         }
         tool_icons = {
             "Watering Can":    _pixmap_from_b64(_WATERING_CAN_B64),
@@ -4229,6 +4240,7 @@ class WebhookTab(QWidget):
             "Favorite Tool":   _pixmap_from_b64(_FAVORITE_TOOL_B64),
             "Super Sprinkler": _pixmap_from_b64(_SUPER_SPRINKLER_B64),
             "Trowel":          _pixmap_from_b64(_TROWEL_B64),
+            "Reverter":        _pixmap_from_b64(_CARROT_B64),
         }
 
         saved_ping_seeds = set(_cfg.get("webhook_ping_seeds", "").split(",")) if _cfg.get("webhook_ping_seeds") else set()
@@ -4491,10 +4503,12 @@ class WebhookTab(QWidget):
         "Carrot", "Corn", "Onion", "Strawberry", "Mushroom", "Beetroot",
         "Tomato", "Apple", "Rose", "Wheat", "Banana", "Plum",
         "Potato", "Cabbage", "Cherry", "Bamboo", "Mango",
+        "Watermelon", "Pineapple",
     ]
     _ALL_TOOLS = [
         "Watering Can", "Basic Sprinkler", "Harvest Bell",
         "Turbo Sprinkler", "Favorite Tool", "Super Sprinkler", "Trowel",
+        "Reverter",
     ]
 
     def _build_payload(self, stats):
